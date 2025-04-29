@@ -1,245 +1,356 @@
 "use client";
-import { useState } from "react";
-import Image from "next/image";
+import { useState, useEffect } from 'react';
+import { generateSKU } from '../utils/skuGenerator';
 
-export default function AddItemModal({ isOpen, onClose, onSave }) {
-    const [item, setItem] = useState({
-        name: "",
-        category: "",
-        sku: "",
-        price: 0,
-        costPrice: 0,
-        quantity: 0,
-        lowStockThreshold: 5,
-        imageUrl: "",
+export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = null }) {
+    const [formData, setFormData] = useState({
+        name: '',
+        category: '',
+        price: '',  // Selling price
+        costPrice: '', // Added cost price
+        quantity: '',
+        sku: '',
+        lowStockThreshold: '',
+        description: ''
     });
-    const [imageFile, setImageFile] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
-    const [isUploading, setIsUploading] = useState(false);
 
-    const handleChange = (e) => {
-        const { name, value, type } = e.target;
-        setItem({
-            ...item,
-            [name]: type === "number" ? parseFloat(value) : value,
-        });
-    };
+    // Predefined categories
+    const categories = [
+        'Electronics',
+        'Clothing',
+        'Home & Kitchen',
+        'Books',
+        'Toys & Games',
+        'Sports & Outdoors',
+        'Beauty & Personal Care',
+        'Office Supplies',
+        'Other'
+    ];
 
-    const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setImageFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [autoGenerateSKU, setAutoGenerateSKU] = useState(!itemToEdit);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setIsUploading(true);
-
-        try {
-            // Prepare item data with image URL if available
-            let finalItem = { ...item };
-
-            // If image file exists, upload it to Google Drive
-            if (imageFile) {
-                // This would be replaced with your actual Google Drive upload function
-                const imageUrl = await uploadImageToGoogleDrive(imageFile);
-                finalItem.imageUrl = imageUrl;
-            }
-
-            // Save the item
-            await onSave(finalItem);
-
-            // Reset form and close modal
-            setItem({
-                name: "",
-                category: "",
-                sku: "",
-                price: 0,
-                costPrice: 0,
-                quantity: 0,
-                lowStockThreshold: 5,
-                imageUrl: "",
+    // If itemToEdit is provided, populate the form with its data
+    useEffect(() => {
+        if (itemToEdit) {
+            setFormData({
+                name: itemToEdit.name || '',
+                category: itemToEdit.category || '',
+                price: itemToEdit.price || '',
+                costPrice: itemToEdit.costPrice || '',
+                quantity: itemToEdit.quantity || '',
+                sku: itemToEdit.sku || '',
+                lowStockThreshold: itemToEdit.lowStockThreshold || '',
+                description: itemToEdit.description || ''
             });
-            setImageFile(null);
-            setImagePreview(null);
-            onClose();
-        } catch (error) {
-            console.error("Error saving item:", error);
-            alert("Failed to save item. Please try again.");
-        } finally {
-            setIsUploading(false);
+            setAutoGenerateSKU(false);
+        } else {
+            // Reset form for new item
+            setFormData({
+                name: '',
+                category: '',
+                price: '',
+                costPrice: '',
+                quantity: '',
+                sku: '',
+                lowStockThreshold: '',
+                description: ''
+            });
+            setAutoGenerateSKU(true);
+        }
+    }, [itemToEdit, isOpen]);
+
+    // Auto-generate SKU when name or category changes if autoGenerateSKU is true
+    useEffect(() => {
+        if (autoGenerateSKU && formData.name && formData.category) {
+            const newSKU = generateSKU(formData.name, formData.category);
+            setFormData(prev => ({
+                ...prev,
+                sku: newSKU
+            }));
+        }
+    }, [formData.name, formData.category, autoGenerateSKU]);
+
+    // Handle input changes
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+        
+        // Clear error for this field
+        if (errors[name]) {
+            setErrors(prev => ({
+                ...prev,
+                [name]: null
+            }));
         }
     };
 
-    // Placeholder function for Google Drive upload
-    const uploadImageToGoogleDrive = async (file) => {
-        // This would be implemented with your Google Drive API integration
-        // For now, return a placeholder URL
-        return URL.createObjectURL(file);
+    // Handle SKU auto-generation toggle
+    const handleSKUToggle = () => {
+        setAutoGenerateSKU(!autoGenerateSKU);
+        
+        // If turning on auto-generation, update SKU immediately
+        if (!autoGenerateSKU && formData.name && formData.category) {
+            const newSKU = generateSKU(formData.name, formData.category);
+            setFormData(prev => ({
+                ...prev,
+                sku: newSKU
+            }));
+        }
+    };
+
+    // Validate form
+    const validateForm = () => {
+        const newErrors = {};
+        
+        if (!formData.name.trim()) {
+            newErrors.name = 'Name is required';
+        }
+        
+        if (!formData.category.trim()) {
+            newErrors.category = 'Category is required';
+        }
+        
+        if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
+            newErrors.price = 'Valid selling price is required';
+        }
+        
+        if (!formData.costPrice || isNaN(Number(formData.costPrice)) || Number(formData.costPrice) < 0) {
+            newErrors.costPrice = 'Valid cost price is required';
+        }
+        
+        if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
+            newErrors.quantity = 'Valid quantity is required';
+        }
+        
+        if (!formData.sku.trim()) {
+            newErrors.sku = 'SKU is required';
+        }
+        
+        if (!formData.lowStockThreshold || isNaN(Number(formData.lowStockThreshold)) || Number(formData.lowStockThreshold) < 0) {
+            newErrors.lowStockThreshold = 'Valid low stock threshold is required';
+        }
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    // Handle form submission
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        
+        if (validateForm()) {
+            setIsSubmitting(true);
+            
+            // Convert numeric fields to numbers
+            const processedData = {
+                ...formData,
+                price: Number(formData.price),
+                costPrice: Number(formData.costPrice),
+                quantity: Number(formData.quantity),
+                lowStockThreshold: Number(formData.lowStockThreshold),
+                ...(itemToEdit && { id: itemToEdit.id }) // Keep the ID if editing
+            };
+            
+            onSave(processedData);
+            setIsSubmitting(false);
+        }
+    };
+
+    // Prevent clicks inside the modal from closing it
+    const handleModalClick = (e) => {
+        e.stopPropagation();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg mx-4 max-h-screen overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-semibold text-primary-600">Add New Item</h2>
-                    <button
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={handleModalClick}>
+                <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                    <h3 className="text-lg font-medium text-primary-600">
+                        {itemToEdit ? 'Edit Item' : 'Add New Item'}
+                    </h3>
+                    <button 
                         onClick={onClose}
-                        className="text-gray-500 hover:text-gray-700"
+                        className="text-gray-400 hover:text-gray-500"
+                        aria-label="Close"
                     >
-                        ✕
+                        <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
-
-                <form onSubmit={handleSubmit}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Item Name
+                
+                <form onSubmit={handleSubmit} className="p-4">
+                    <div className="grid grid-cols-1 gap-4">
+                        <div>
+                            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                                Item Name *
                             </label>
                             <input
                                 type="text"
+                                id="name"
                                 name="name"
-                                value={item.name}
+                                value={formData.name}
                                 onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                    errors.name ? 'border-red-500' : 'border-gray-300'
+                                }`}
                             />
+                            {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                         </div>
-
+                        
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Category
+                            <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
+                                Category *
                             </label>
-                            <input
-                                type="text"
+                            <select
+                                id="category"
                                 name="category"
-                                value={item.category}
+                                value={formData.category}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                    errors.category ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                            >
+                                <option value="">Select a category</option>
+                                {categories.map(category => (
+                                    <option key={category} value={category}>{category}</option>
+                                ))}
+                            </select>
+                            {errors.category && <p className="mt-1 text-xs text-red-500">{errors.category}</p>}
                         </div>
-
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Selling Price ($) *
+                                </label>
+                                <input
+                                    type="number"
+                                    id="price"
+                                    name="price"
+                                    value={formData.price}
+                                    onChange={handleChange}
+                                    step="0.01"
+                                    min="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                        errors.price ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                />
+                                {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
+                            </div>
+                            
+                            <div>
+                                <label htmlFor="costPrice" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Cost Price ($) *
+                                </label>
+                                <input
+                                    type="number"
+                                    id="costPrice"
+                                    name="costPrice"
+                                    value={formData.costPrice}
+                                    onChange={handleChange}
+                                    step="0.01"
+                                    min="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                        errors.costPrice ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                />
+                                {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Quantity *
+                                </label>
+                                <input
+                                    type="number"
+                                    id="quantity"
+                                    name="quantity"
+                                    value={formData.quantity}
+                                    onChange={handleChange}
+                                    min="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                        errors.quantity ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                />
+                                {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
+                            </div>
+                            
+                            <div>
+                                <label htmlFor="lowStockThreshold" className="block text-sm font-medium text-gray-700 mb-1">
+                                    Low Stock Threshold *
+                                </label>
+                                <input
+                                    type="number"
+                                    id="lowStockThreshold"
+                                    name="lowStockThreshold"
+                                    value={formData.lowStockThreshold}
+                                    onChange={handleChange}
+                                    min="0"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                        errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
+                                    }`}
+                                />
+                                {errors.lowStockThreshold && <p className="mt-1 text-xs text-red-500">{errors.lowStockThreshold}</p>}
+                            </div>
+                        </div>
+                        
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                SKU
-                            </label>
+                            <div className="flex justify-between items-center">
+                                <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
+                                    SKU *
+                                </label>
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id="autoSKU"
+                                        checked={autoGenerateSKU}
+                                        onChange={handleSKUToggle}
+                                        className="mr-2 h-4 w-4 text-primary-600 focus:ring-accent-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor="autoSKU" className="text-xs text-gray-500">
+                                        Auto-generate
+                                    </label>
+                                </div>
+                            </div>
                             <input
                                 type="text"
+                                id="sku"
                                 name="sku"
-                                value={item.sku}
+                                value={formData.sku}
                                 onChange={handleChange}
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                                disabled={autoGenerateSKU}
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                    errors.sku ? 'border-red-500' : 'border-gray-300'
+                                } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
                             />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Selling Price ($)
-                            </label>
-                            <input
-                                type="number"
-                                name="price"
-                                value={item.price}
-                                onChange={handleChange}
-                                step="0.01"
-                                min="0"
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Cost Price ($)
-                            </label>
-                            <input
-                                type="number"
-                                name="costPrice"
-                                value={item.costPrice}
-                                onChange={handleChange}
-                                step="0.01"
-                                min="0"
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Quantity
-                            </label>
-                            <input
-                                type="number"
-                                name="quantity"
-                                value={item.quantity}
-                                onChange={handleChange}
-                                min="0"
-                                required
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Low Stock Alert Threshold
-                            </label>
-                            <input
-                                type="number"
-                                name="lowStockThreshold"
-                                value={item.lowStockThreshold}
-                                onChange={handleChange}
-                                min="0"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
-                        </div>
-
-                        <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Product Image
-                            </label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                            />
-                            {imagePreview && (
-                                <div className="mt-2 relative h-40 w-40">
-                                    <Image
-                                        src={imagePreview}
-                                        alt="Product preview"
-                                        fill
-                                        className="rounded-md object-cover"
-                                    />
-                                </div>
-                            )}
+                            {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
                         </div>
                     </div>
-
-                    <div className="flex justify-end space-x-3 mt-6">
+                    
+                    <div className="mt-6 flex justify-end space-x-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                            className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            disabled={isUploading}
-                            className="px-4 py-2 bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium rounded-md transition-colors"
+                            disabled={isSubmitting}
+                            className="px-4 py-2 bg-primary-700 hover:bg-primary-500 text-white font-medium rounded transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
                         >
-                            {isUploading ? "Saving..." : "Save Item"}
+                            {isSubmitting ? 'Saving...' : itemToEdit ? 'Update' : '+ Add'}
                         </button>
                     </div>
                 </form>

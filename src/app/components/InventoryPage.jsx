@@ -11,6 +11,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     const [filterCategory, setFilterCategory] = useState('');
     const [sortBy, setSortBy] = useState('name'); // name, price, quantity
     const [sortDirection, setSortDirection] = useState('asc'); // asc, desc
+    const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
     // Get all categories from inventory
     const categories = [...new Set(inventory.map(item => item.category))].filter(Boolean);
@@ -109,17 +110,22 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-    return (
-        <div>
-            <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold text-primary-500 mb-4 md:mb-0">Inventory Management</h1>
+    // Toggle filter panel on mobile
+    const toggleFilterPanel = () => {
+        setIsFilterExpanded(!isFilterExpanded);
+    };
 
-                <div className="flex flex-col sm:flex-row w-full md:w-auto gap-3">
+    return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Inventory Management</h1>
+
+                <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded-md transition-colors"
+                        className="bg-primary-700 hover:bg-primary-500 text-[#fff] font-medium px-4 py-2 rounded transition-colors"
                     >
-                        Add New Item
+                        + New Item
                     </button>
 
                     {selectedItems.length > 0 && (
@@ -133,9 +139,34 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="md:col-span-2">
+            {/* Filter toggle button (mobile only) */}
+            <button
+                onClick={toggleFilterPanel}
+                className="w-full sm:hidden bg-white rounded-lg shadow-md p-3 mb-4 flex justify-between items-center"
+            >
+                <span className="font-medium text-gray-700">
+                    {isFilterExpanded ? 'Hide Filters' : 'Show Filters'}
+                </span>
+                <svg
+                    className={`h-5 w-5 transition-transform ${isFilterExpanded ? 'rotate-180' : ''}`}
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                    />
+                </svg>
+            </button>
+
+            {/* Filter panel */}
+            <div className={`bg-white rounded-lg shadow-md p-4 mb-6 ${!isFilterExpanded ? 'hidden sm:block' : 'block'}`}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="sm:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Search
                         </label>
@@ -180,13 +211,21 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                             </select>
                             <button
                                 onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                                className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md"
+                                className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200 transition-colors"
+                                aria-label={sortDirection === 'asc' ? 'Sort ascending' : 'Sort descending'}
                             >
                                 {sortDirection === 'asc' ? '↑' : '↓'}
                             </button>
                         </div>
                     </div>
                 </div>
+            </div>
+
+            {/* Results count */}
+            <div className="mb-4 text-sm text-gray-500">
+                Showing {sortedInventory.length} of {inventory.length} items
+                {searchTerm && <span> matching "{searchTerm}"</span>}
+                {filterCategory && <span> in {filterCategory}</span>}
             </div>
 
             <InventoryList

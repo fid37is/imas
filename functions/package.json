@@ -1,26 +1,24 @@
 {
-  "name": "functions",
-  "description": "Cloud Functions for Firebase",
+  "name": "inventory-management-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Inventory Management System with Google Drive and Sheets integration",
+  "main": "index.js",
+  "engines": {
+    "node": "16"
+  },
   "scripts": {
-    "lint": "eslint .",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },
-  "engines": {
-    "node": "22"
-  },
-  "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.0.1"
-  },
-  "devDependencies": {
-    "eslint": "^8.15.0",
-    "eslint-config-google": "^0.14.0",
-    "firebase-functions-test": "^3.1.0"
+    "@google-cloud/storage": "^6.9.4",
+    "firebase-admin": "^11.5.0",
+    "firebase-functions": "^4.2.1",
+    "googleapis": "^110.0.0",
+    "sharp": "^0.31.3"
   },
   "private": true
 }
