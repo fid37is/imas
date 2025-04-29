@@ -1,5 +1,5 @@
-const functions = require('firebase-functions');
-const admin = require('firebase-admin');
+const functions = ('firebase-functions');
+const admin = ('firebase-admin');
 
 // Initialize admin if not already initialized
 if (!admin.apps.length) {

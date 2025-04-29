@@ -2,8 +2,8 @@ import { httpsCallable } from "firebase/functions";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { functions, storage } from "../firebase/config";
 
-// Helper for debugging
-const isDev = process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost';
+// Helper for debugging - Next.js safe way to check environment
+const isDev = process.env.NODE_ENV === 'development';
 
 /**
  * Add a new item to inventory
@@ -36,15 +36,6 @@ export const addItem = async (item) => {
                 name: error.name,
                 stack: error.stack
             });
-            
-            if (error.code === 'unavailable' || error.message.includes('connection refused')) {
-                console.error(`
-                    FIREBASE EMULATOR CONNECTION ERROR: 
-                    - Make sure Firebase emulator is running with 'firebase emulators:start'
-                    - Check that the emulator port (5001) is correct
-                    - Ensure no firewall is blocking the connection
-                `);
-            }
         }
         throw error;
     }
@@ -128,22 +119,38 @@ export const getInventory = async () => {
                 message: error.message,
                 details: error.details
             });
-            
-            if (error.code === 'unavailable' || error.message.includes('connection refused')) {
-                console.error(`
-                    FIREBASE EMULATOR CONNECTION ERROR: 
-                    - Make sure Firebase emulator is running with 'firebase emulators:start'
-                    - Check that the emulator port (5001) is correct
-                    - Ensure no firewall is blocking the connection
-                `);
-            }
         }
         
         throw error;
     }
 };
 
-// Rest of your functions with similar improved error handling...
+/**
+ * Get all sales records
+ * @returns {Promise<Array>} - Array of sales records
+ */
+export const getSales = async () => {
+    try {
+        if (isDev) console.log("Fetching sales records");
+        
+        const getSalesFunction = httpsCallable(functions, 'getSales');
+        const result = await getSalesFunction();
+        if (isDev) console.log("Sales records fetched successfully:", result.data?.length || 0, "records");
+        return result.data || [];
+    } catch (error) {
+        console.error("Error in getSales:", error);
+        
+        if (isDev) {
+            console.error("Detailed error:", {
+                code: error.code,
+                message: error.message,
+                details: error.details
+            });
+        }
+        
+        throw error;
+    }
+};
 
 /**
  * Record a sale

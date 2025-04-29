@@ -1,9 +1,6 @@
 // firebase/config.js
 import { initializeApp } from "firebase/app";
-import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
-import { getStorage, connectStorageEmulator } from "firebase/storage";
-import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -17,18 +14,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const functions = getFunctions(app);
-const storage = getStorage(app);
 const auth = getAuth(app);
 
-// Connect to emulators in development environment
-if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
-    console.log('Using Firebase emulators');
-    connectFirestoreEmulator(db, 'localhost', 8080);
-    connectFunctionsEmulator(functions, 'localhost', 5001);
-    connectStorageEmulator(storage, 'localhost', 9199);
-    connectAuthEmulator(auth, 'http://localhost:9099');
-}
 
-export { app, db, functions, storage, auth };
+
+export { app, auth };
