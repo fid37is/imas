@@ -1,19 +1,102 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import AddItemModal from './AddItemModal';
 import InventoryList from './InventoryList';
-import {
-    fetchInventory,
-    addInventoryItem,
-    updateInventoryItem,
-    deleteInventoryItem
-} from '../utils/dataService';
+import { addItem, updateItem, deleteItem } from '../utils/dataService';
 
-export default function InventoryPage() {
-    const { data: session, status } = useSession();
-    const [inventory, setInventory] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
+// Custom Alert Component
+const CustomAlert = ({ message, type, isOpen, onClose }) => {
+    useEffect(() => {
+        if (isOpen) {
+            const timer = setTimeout(() => {
+                onClose();
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen, onClose]);
+
+    if (!isOpen) return null;
+
+    const bgColor = type === 'success'
+        ? 'bg-green-100 border-l-4 border-green-500 text-green-700'
+        : type === 'error'
+            ? 'bg-red-100 border-l-4 border-red-500 text-red-700'
+            : 'bg-blue-100 border-l-4 border-blue-500 text-blue-700';
+
+    return (
+        <div className="fixed top-4 right-4 z-50 shadow-md transition-all duration-300 transform translate-x-0 opacity-100">
+            <div className={`${bgColor} p-4 rounded-md flex items-start max-w-md`}>
+                <div className="flex-grow">
+                    <p className="font-medium">{message}</p>
+                </div>
+                <button
+                    onClick={onClose}
+                    className="ml-4 text-gray-500 hover:text-gray-800"
+                >
+                    &times;
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// Confirmation Dialog Component
+const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">{title}</h3>
+                <p className="text-gray-500 mb-6">{message}</p>
+                <div className="flex justify-end gap-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
+                    >
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Skeleton Loader for Inventory List
+const InventorySkeletonLoader = () => {
+    return (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+            <div className="animate-pulse">
+                <div className="bg-gray-100 p-4">
+                    <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+                <div className="p-4 border-t border-gray-200">
+                    {[...Array(5)].map((_, index) => (
+                        <div key={index} className="py-3">
+                            <div className="flex justify-between items-center mb-2">
+                                <div className="h-5 bg-gray-200 rounded w-1/3"></div>
+                                <div className="h-5 bg-gray-200 rounded w-16"></div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+                                <div className="h-4 bg-gray-200 rounded w-20"></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedItems, setSelectedItems] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -21,80 +104,55 @@ export default function InventoryPage() {
     const [sortBy, setSortBy] = useState('name'); // name, price, quantity
     const [sortDirection, setSortDirection] = useState('asc'); // asc, desc
     const [isFilterExpanded, setIsFilterExpanded] = useState(false);
-    const [spreadsheetId, setSpreadsheetId] = useState(process.env.NEXT_PUBLIC_DEFAULT_SHEET_ID || '');
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Alert and confirmation state
+    const [alert, setAlert] = useState({ message: '', type: 'info', isOpen: false });
+    const [confirmDialog, setConfirmDialog] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { }
+    });
+
+    // Show alert helper function
+    const showAlert = (message, type = 'info') => {
+        setAlert({ message, type, isOpen: true });
+    };
+
+    // Close alert helper function
+    const closeAlert = () => {
+        setAlert(prev => ({ ...prev, isOpen: false }));
+    };
 
     // Get all categories from inventory
     const categories = [...new Set(inventory.map(item => item.category))].filter(Boolean);
 
-    // Load inventory data from Google Sheets
-    useEffect(() => {
-        if (status === 'authenticated' && spreadsheetId) {
-            loadInventory();
-        }
-    }, [status, spreadsheetId]);
-
-    const loadInventory = async () => {
-        try {
-            setIsLoading(true);
-            const data = await fetchInventory(spreadsheetId, 'Inventory!A1:J1000');
-
-            // Convert string values to appropriate types
-            const processedData = data.items.map(item => ({
-                ...item,
-                id: item.id || item.sku, // Use SKU as ID if no ID column exists
-                price: parseFloat(item.price) || 0,
-                costPrice: parseFloat(item.cost_price || item.costprice || 0) || 0,
-                quantity: parseInt(item.quantity) || 0,
-                lowStockThreshold: parseInt(item.low_stock_threshold || item.lowstockthreshold || 5) || 5,
-                imageId: item.image_id || item.imageid || '',
-                imageUrl: item.image_url || item.imageurl || '',
-            }));
-
-            setInventory(processedData);
-        } catch (error) {
-            console.error("Error loading inventory:", error);
-            alert("Failed to load inventory data. Please try again.");
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     // Handle adding a new item
     const handleAddItem = async (newItem) => {
         try {
-            // Upload image to Google Drive if provided
-            if (newItem.imageFile) {
-                const imageData = await uploadImageToDrive(newItem.imageFile);
-                newItem.imageId = imageData.fileId;
-                newItem.imageUrl = imageData.directUrl || imageData.webViewLink;
-                delete newItem.imageFile; // Remove the file object
-            }
-
-            // Add to Google Sheets
-            const addedItem = await addInventoryItem(spreadsheetId, newItem);
+            setIsLoading(true);
+            // Add to database and get ID
+            const itemWithId = await addItem(newItem);
 
             // Update local state
-            setInventory([...inventory, addedItem]);
+            setInventory([...inventory, itemWithId]);
             setIsAddModalOpen(false);
+            showAlert(`Item "${newItem.name}" added successfully`, 'success');
         } catch (error) {
             console.error("Error adding item:", error);
-            alert("Failed to add item. Please try again.");
+            showAlert("Failed to add item. Please try again.", 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     // Handle updating an item
     const handleUpdateItem = async (updatedItem) => {
         try {
-            // Upload new image if provided
-            if (updatedItem.imageFile) {
-                const imageData = await uploadImageToDrive(updatedItem.imageFile);
-                updatedItem.imageId = imageData.fileId;
-                updatedItem.imageUrl = imageData.directUrl || imageData.webViewLink;
-                delete updatedItem.imageFile; // Remove the file object
-            }
-
-            // Update in Google Sheets
-            await updateInventoryItem(spreadsheetId, updatedItem);
+            setIsLoading(true);
+            // Update in database
+            await updateItem(updatedItem);
 
             // Update local state
             const updatedInventory = inventory.map(item =>
@@ -102,110 +160,80 @@ export default function InventoryPage() {
             );
 
             setInventory(updatedInventory);
+            showAlert(`Item "${updatedItem.name}" updated successfully`, 'success');
         } catch (error) {
             console.error("Error updating item:", error);
-            alert("Failed to update item. Please try again.");
+            showAlert("Failed to update item. Please try again.", 'error');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     // Handle deleting an item
     const handleDeleteItem = async (itemId) => {
-        if (!confirm("Are you sure you want to delete this item?")) return;
+        const itemToDelete = inventory.find(item => item.id === itemId);
 
-        try {
-            // Delete from Google Sheets
-            await deleteInventoryItem(spreadsheetId, itemId);
+        // Show confirmation dialog
+        setConfirmDialog({
+            isOpen: true,
+            title: "Delete Item",
+            message: `Are you sure you want to delete "${itemToDelete?.name || 'this item'}"?`,
+            onConfirm: async () => {
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                try {
+                    setIsLoading(true);
+                    // Delete from database
+                    await deleteItem(itemId);
 
-            // Update local state
-            setInventory(inventory.filter(item => item.id !== itemId));
-        } catch (error) {
-            console.error("Error deleting item:", error);
-            alert("Failed to delete item. Please try again.");
-        }
+                    // Update local state
+                    setInventory(inventory.filter(item => item.id !== itemId));
+                    showAlert(`Item deleted successfully`, 'success');
+                } catch (error) {
+                    console.error("Error deleting item:", error);
+                    showAlert("Failed to delete item. Please try again.", 'error');
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        });
     };
 
     // Handle bulk delete
     const handleBulkDelete = async () => {
         if (selectedItems.length === 0) return;
 
-        if (!confirm(`Are you sure you want to delete ${selectedItems.length} items?`)) return;
+        // Show confirmation dialog
+        setConfirmDialog({
+            isOpen: true,
+            title: "Delete Items",
+            message: `Are you sure you want to delete ${selectedItems.length} items?`,
+            onConfirm: async () => {
+                setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                try {
+                    setIsLoading(true);
+                    // Delete from database one by one
+                    for (const itemId of selectedItems) {
+                        await deleteItem(itemId);
+                    }
 
-        try {
-            // Delete from Google Sheets one by one
-            for (const itemId of selectedItems) {
-                await deleteInventoryItem(spreadsheetId, itemId);
+                    // Update local state
+                    setInventory(inventory.filter(item => !selectedItems.includes(item.id)));
+                    setSelectedItems([]);
+                    showAlert(`${selectedItems.length} items deleted successfully`, 'success');
+                } catch (error) {
+                    console.error("Error deleting items:", error);
+                    showAlert("Failed to delete some items. Please try again.", 'error');
+                } finally {
+                    setIsLoading(false);
+                }
             }
-
-            // Update local state
-            setInventory(inventory.filter(item => !selectedItems.includes(item.id)));
-            setSelectedItems([]);
-        } catch (error) {
-            console.error("Error deleting items:", error);
-            alert("Failed to delete some items. Please try again.");
-        }
-    };
-
-    // Handle selling an item
-    const handleSellItem = async (item, quantity) => {
-        try {
-            const updatedItem = {
-                ...item,
-                quantity: item.quantity - quantity
-            };
-
-            // Update the item quantity in Google Sheets
-            await updateInventoryItem(spreadsheetId, updatedItem);
-
-            // Update local state
-            const updatedInventory = inventory.map(invItem =>
-                invItem.id === item.id ? updatedItem : invItem
-            );
-
-            setInventory(updatedInventory);
-
-            // Optionally, record the sale in a separate "Sales" sheet
-            // This would require another API call to add a row to that sheet
-
-            return true;
-        } catch (error) {
-            console.error("Error selling item:", error);
-            alert("Failed to process sale. Please try again.");
-            return false;
-        }
-    };
-
-    // Upload image to Google Drive
-    const uploadImageToDrive = async (file) => {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Upload to Google Drive using the API
-        const response = await fetch('/api/drive/upload', {
-            method: 'POST',
-            body: formData,
         });
-
-        if (!response.ok) {
-            throw new Error('Failed to upload image to Google Drive');
-        }
-
-        // Get the file data from the response
-        const data = await response.json();
-
-        // Get a direct URL for the image
-        const urlResponse = await fetch(`/api/drive/get-url?fileId=${data.fileId}`);
-        if (!urlResponse.ok) {
-            throw new Error('Failed to get image URL');
-        }
-
-        return await urlResponse.json();
     };
 
     // Filter inventory based on search and category
     const filteredInventory = inventory.filter(item => {
-        const matchesSearch =
-            (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.sku.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = filterCategory === '' || item.category === filterCategory;
 
         return matchesSearch && matchesCategory;
@@ -216,11 +244,11 @@ export default function InventoryPage() {
         let comparison = 0;
 
         if (sortBy === 'name') {
-            comparison = (a.name || '').localeCompare(b.name || '');
+            comparison = a.name.localeCompare(b.name);
         } else if (sortBy === 'price') {
-            comparison = (a.price || 0) - (b.price || 0);
+            comparison = a.price - b.price;
         } else if (sortBy === 'quantity') {
-            comparison = (a.quantity || 0) - (b.quantity || 0);
+            comparison = a.quantity - b.quantity;
         }
 
         return sortDirection === 'asc' ? comparison : -comparison;
@@ -231,48 +259,33 @@ export default function InventoryPage() {
         setIsFilterExpanded(!isFilterExpanded);
     };
 
-    // Show loading state
-    if (status === 'loading' || (status === 'authenticated' && isLoading)) {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="flex justify-center items-center h-64">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
-                        <p className="mt-4 text-gray-600">Loading inventory...</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // Show login prompt if not authenticated
-    if (status !== 'authenticated') {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                <div className="flex justify-center items-center h-64">
-                    <div className="text-center">
-                        <p className="text-lg text-gray-700 mb-4">Please sign in to access inventory management</p>
-                        <button
-                            onClick={() => signIn('google')}
-                            className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-6 py-2 rounded transition-colors"
-                        >
-                            Sign in with Google
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* Custom Alert */}
+            <CustomAlert
+                message={alert.message}
+                type={alert.type}
+                isOpen={alert.isOpen}
+                onClose={closeAlert}
+            />
+
+            {/* Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={confirmDialog.isOpen}
+                onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                onConfirm={confirmDialog.onConfirm}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+            />
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Inventory Management</h1>
 
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-4 py-2 rounded transition-colors"
+                        className="bg-primary-700 hover:bg-primary-500 text-[#fff] font-medium px-4 py-2 rounded transition-colors"
+                        disabled={isLoading}
                     >
                         + New Item
                     </button>
@@ -280,7 +293,8 @@ export default function InventoryPage() {
                     {selectedItems.length > 0 && (
                         <button
                             onClick={handleBulkDelete}
-                            className="bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded-md transition-colors"
+                            className="bg-red-500 hover:bg-red-600 text-white font-medium px-4 py-2 rounded transition-colors"
+                            disabled={isLoading}
                         >
                             Delete Selected ({selectedItems.length})
                         </button>
@@ -325,6 +339,7 @@ export default function InventoryPage() {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder="Search by name or SKU..."
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            disabled={isLoading}
                         />
                     </div>
 
@@ -336,6 +351,7 @@ export default function InventoryPage() {
                             value={filterCategory}
                             onChange={(e) => setFilterCategory(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            disabled={isLoading}
                         >
                             <option value="">All Categories</option>
                             {categories.map(category => (
@@ -353,6 +369,7 @@ export default function InventoryPage() {
                                 value={sortBy}
                                 onChange={(e) => setSortBy(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                                disabled={isLoading}
                             >
                                 <option value="name">Name</option>
                                 <option value="price">Price</option>
@@ -362,41 +379,13 @@ export default function InventoryPage() {
                                 onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
                                 className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200 transition-colors"
                                 aria-label={sortDirection === 'asc' ? 'Sort ascending' : 'Sort descending'}
+                                disabled={isLoading}
                             >
                                 {sortDirection === 'asc' ? '↑' : '↓'}
                             </button>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            {/* Spreadsheet ID input */}
-            <div className="mb-6 bg-white rounded-lg shadow-md p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="flex-grow">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Google Sheets ID
-                        </label>
-                        <input
-                            type="text"
-                            value={spreadsheetId}
-                            onChange={(e) => setSpreadsheetId(e.target.value)}
-                            placeholder="Enter your Google Sheets ID..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
-                        />
-                    </div>
-                    <div className="sm:self-end">
-                        <button
-                            onClick={loadInventory}
-                            className="w-full sm:w-auto bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded transition-colors"
-                        >
-                            Load Inventory
-                        </button>
-                    </div>
-                </div>
-                <p className="mt-2 text-xs text-gray-500">
-                    Your inventory should be in a sheet named "Inventory" with headers in row 1.
-                </p>
             </div>
 
             {/* Results count */}
@@ -406,14 +395,19 @@ export default function InventoryPage() {
                 {filterCategory && <span> in {filterCategory}</span>}
             </div>
 
-            <InventoryList
-                items={sortedInventory}
-                selectedItems={selectedItems}
-                setSelectedItems={setSelectedItems}
-                onUpdateItem={handleUpdateItem}
-                onDeleteItem={handleDeleteItem}
-                onSellItem={handleSellItem}
-            />
+            {/* Show skeleton loader when loading, otherwise show inventory list */}
+            {isLoading ? (
+                <InventorySkeletonLoader />
+            ) : (
+                <InventoryList
+                    items={sortedInventory}
+                    selectedItems={selectedItems}
+                    setSelectedItems={setSelectedItems}
+                    onUpdateItem={handleUpdateItem}
+                    onDeleteItem={handleDeleteItem}
+                    onSellItem={onSellItem}
+                />
+            )}
 
             {isAddModalOpen && (
                 <AddItemModal

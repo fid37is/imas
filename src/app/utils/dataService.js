@@ -1,276 +1,107 @@
-import { httpsCallable } from "firebase/functions";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { functions } from "../firebase/config";
+// utils/dataService.js
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { app } from './firebase'; 
 
-// Helper for debugging - Next.js safe way to check environment
-const isDev = process.env.NODE_ENV === 'development';
+const functions = getFunctions(app);
 
-/**
- * Add a new item to inventory
- * @param {Object} item - Item data
- * @returns {Promise<Object>} - Item with ID
- */
-export const addItem = async (item) => {
-    try {
-        if (isDev) console.log("Adding item:", item);
-        
-        // First, if there's an image, upload it to Google Drive
-        if (item.imageFile) {
-            const imageUrl = await uploadImageToDrive(item.imageFile);
-            item.imageUrl = imageUrl;
-            delete item.imageFile; // Remove the file object before sending to Cloud Function
-        }
-
-        const addItemFunction = httpsCallable(functions, 'addInventoryItem');
-        if (isDev) console.log("Calling addInventoryItem function");
-        const result = await addItemFunction(item);
-        if (isDev) console.log("Item added successfully:", result.data);
-        return result.data;
-    } catch (error) {
-        console.error("Error in addItem:", error);
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details,
-                name: error.name,
-                stack: error.stack
-            });
-        }
-        throw error;
-    }
-};
+// Functions for Google Sheets operations
+const getInventoryFromSheets = httpsCallable(functions, 'getInventoryFromSheets');
+const addInventoryItemToSheets = httpsCallable(functions, 'addInventoryItemToSheets');
+const updateInventoryItemInSheets = httpsCallable(functions, 'updateInventoryItemInSheets');
+const deleteInventoryItemFromSheets = httpsCallable(functions, 'deleteInventoryItemFromSheets');
+const recordSaleInSheets = httpsCallable(functions, 'recordSaleInSheets');
+const getSalesFromSheets = httpsCallable(functions, 'getSalesFromSheets');
 
 /**
- * Update an existing item
- * @param {Object} item - Updated item data with ID
- * @returns {Promise<void>}
- */
-export const updateItem = async (item) => {
-    try {
-        if (isDev) console.log("Updating item:", item);
-        
-        // Handle image upload if there's a new image
-        if (item.imageFile) {
-            const imageUrl = await uploadImageToDrive(item.imageFile);
-            item.imageUrl = imageUrl;
-            delete item.imageFile; // Remove the file object before sending to Cloud Function
-        }
-        
-        const updateItemFunction = httpsCallable(functions, 'updateInventoryItem');
-        await updateItemFunction(item);
-        if (isDev) console.log("Item updated successfully");
-    } catch (error) {
-        console.error("Error in updateItem:", error);
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
-        throw error;
-    }
-};
-
-/**
- * Delete an item by ID
- * @param {string} itemId - Item ID to delete
- * @returns {Promise<void>}
- */
-export const deleteItem = async (itemId) => {
-    try {
-        if (isDev) console.log("Deleting item:", itemId);
-        
-        const deleteItemFunction = httpsCallable(functions, 'deleteInventoryItem');
-        await deleteItemFunction({ id: itemId });
-        if (isDev) console.log("Item deleted successfully");
-    } catch (error) {
-        console.error("Error in deleteItem:", error);
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
-        throw error;
-    }
-};
-
-/**
- * Get all inventory items
- * @returns {Promise<Array>} - Array of inventory items
+ * Get all inventory items from Google Sheets
  */
 export const getInventory = async () => {
     try {
-        if (isDev) console.log("Fetching inventory");
-        
-        // Check if functions is properly initialized
-        if (!functions) {
-            console.error("Firebase functions client is not initialized");
-            return [];
-        }
-        
-        const getInventoryFunction = httpsCallable(functions, 'getInventory');
-        const result = await getInventoryFunction();
-        if (isDev) console.log("Inventory fetched successfully:", result.data?.length || 0, "items");
+        const result = await getInventoryFromSheets();
         return result.data || [];
     } catch (error) {
-        console.error("Error in getInventory:", error);
-        
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
-        
+        console.error('Error getting inventory:', error);
         throw error;
     }
 };
 
 /**
- * Get all sales records
- * @returns {Promise<Array>} - Array of sales records
+ * Get all sales records from Google Sheets
  */
 export const getSales = async () => {
     try {
-        if (isDev) console.log("Fetching sales records");
-        
-        // Check if functions is properly initialized
-        if (!functions) {
-            console.error("Firebase functions client is not initialized");
-            return [];
-        }
-        
-        const getSalesFunction = httpsCallable(functions, 'getSales');
-        const result = await getSalesFunction();
-        if (isDev) console.log("Sales records fetched successfully:", result.data?.length || 0, "records");
+        const result = await getSalesFromSheets();
         return result.data || [];
     } catch (error) {
-        console.error("Error in getSales:", error);
-        
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
-        
+        console.error('Error getting sales data:', error);
         throw error;
     }
 };
 
 /**
- * Record a sale
- * @param {Object} item - Item being sold
- * @param {number} quantity - Quantity being sold
- * @returns {Promise<Object>} - Sale record with ID
+ * Add a new inventory item to Google Sheets
+ */
+export const addItem = async (itemData) => {
+    try {
+        const result = await addInventoryItemToSheets(itemData);
+        return result.data;
+    } catch (error) {
+        console.error('Error adding item:', error);
+        throw error;
+    }
+};
+
+/**
+ * Update an existing inventory item in Google Sheets
+ */
+export const updateItem = async (itemData) => {
+    try {
+        await updateInventoryItemInSheets(itemData);
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating item:', error);
+        throw error;
+    }
+};
+
+/**
+ * Delete an inventory item from Google Sheets
+ */
+export const deleteItem = async (itemId) => {
+    try {
+        await deleteInventoryItemFromSheets({ id: itemId });
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        throw error;
+    }
+};
+
+/**
+ * Record a sale in Google Sheets and update inventory
  */
 export const recordSale = async (item, quantity) => {
     try {
-        if (isDev) console.log("Recording sale:", { item, quantity });
-        
+        // Calculate new quantity after sale
+        const newQuantity = item.quantity - quantity;
+
+        if (newQuantity < 0) {
+            throw new Error('Not enough items in stock');
+        }
+
+        // Record the sale
         const saleData = {
             itemId: item.id,
             itemName: item.name,
             quantity: quantity,
             price: item.price,
-            costPrice: item.costPrice || 0,
-            total: item.price * quantity,
-            profit: ((item.price - (item.costPrice || 0)) * quantity),
-            date: new Date().toISOString()
+            newQuantity: newQuantity // Pass new quantity for inventory update
         };
 
-        const recordSaleFunction = httpsCallable(functions, 'recordSale');
-        const result = await recordSaleFunction(saleData);
-
-        // Also update the inventory quantity
-        const updatedItem = {
-            ...item,
-            quantity: item.quantity - quantity
-        };
-        await updateItem(updatedItem);
-        
-        if (isDev) console.log("Sale recorded successfully");
+        const result = await recordSaleInSheets(saleData);
         return result.data;
     } catch (error) {
-        console.error("Error in recordSale:", error);
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
+        console.error('Error recording sale:', error);
         throw error;
     }
-};
-
-/**
- * Upload image to Google Drive via Cloud Function
- * @param {File} file - Image file to upload
- * @returns {Promise<string>} - URL to the uploaded image
- */
-export const uploadImageToDrive = async (file) => {
-    try {
-        if (isDev) console.log("Uploading image:", file.name);
-        
-        // Check if storage is properly initialized
-        if (!storage) {
-            console.error("Firebase storage client is not initialized");
-            throw new Error("Storage not initialized");
-        }
-        
-        // First, upload to Firebase Storage as a fallback/cache
-        const storageRef = ref(storage, `inventory-images/${Date.now()}-${file.name}`);
-        await uploadBytes(storageRef, file);
-        const downloadUrl = await getDownloadURL(storageRef);
-        
-        // Then convert file to base64 for sending to Cloud Function
-        const base64File = await fileToBase64(file);
-
-        // Send to Cloud Function to handle Google Drive upload
-        const uploadImageFunction = httpsCallable(functions, 'uploadImageToDrive');
-        const result = await uploadImageFunction({
-            filename: file.name,
-            contentType: file.type,
-            base64Data: base64File,
-            fallbackUrl: downloadUrl, // Store the Firebase URL as fallback
-        });
-        
-        if (isDev) console.log("Image uploaded successfully");
-        return result.data.imageUrl || downloadUrl;
-    } catch (error) {
-        console.error("Error in uploadImageToDrive:", error);
-        if (isDev) {
-            console.error("Detailed error:", {
-                code: error.code,
-                message: error.message,
-                details: error.details
-            });
-        }
-        throw error;
-    }
-};
-
-/**
- * Convert file to base64 string
- * @param {File} file - File to convert
- * @returns {Promise<string>} - Base64 string
- */
-const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => {
-            // Get the base64 string by removing the prefix
-            const base64String = reader.result.split(',')[1];
-            resolve(base64String);
-        };
-        reader.onerror = (error) => reject(error);
-    });
 };
