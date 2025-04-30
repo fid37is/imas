@@ -1,10 +1,19 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import AddItemModal from './AddItemModal';
 import InventoryList from './InventoryList';
-import { addItem, updateItem, deleteItem } from '../utils/dataService';
+import {
+    fetchInventory,
+    addInventoryItem,
+    updateInventoryItem,
+    deleteInventoryItem
+} from '../utils/dataService';
 
-export default function InventoryPage({ inventory, setInventory, onSellItem }) {
+export default function InventoryPage() {
+    const { data: session, status } = useSession();
+    const [inventory, setInventory] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedItems, setSelectedItems] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -12,18 +21,60 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     const [sortBy, setSortBy] = useState('name'); // name, price, quantity
     const [sortDirection, setSortDirection] = useState('asc'); // asc, desc
     const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+    const [spreadsheetId, setSpreadsheetId] = useState(process.env.NEXT_PUBLIC_DEFAULT_SHEET_ID || '');
 
     // Get all categories from inventory
     const categories = [...new Set(inventory.map(item => item.category))].filter(Boolean);
 
+    // Load inventory data from Google Sheets
+    useEffect(() => {
+        if (status === 'authenticated' && spreadsheetId) {
+            loadInventory();
+        }
+    }, [status, spreadsheetId]);
+
+    const loadInventory = async () => {
+        try {
+            setIsLoading(true);
+            const data = await fetchInventory(spreadsheetId, 'Inventory!A1:J1000');
+
+            // Convert string values to appropriate types
+            const processedData = data.items.map(item => ({
+                ...item,
+                id: item.id || item.sku, // Use SKU as ID if no ID column exists
+                price: parseFloat(item.price) || 0,
+                costPrice: parseFloat(item.cost_price || item.costprice || 0) || 0,
+                quantity: parseInt(item.quantity) || 0,
+                lowStockThreshold: parseInt(item.low_stock_threshold || item.lowstockthreshold || 5) || 5,
+                imageId: item.image_id || item.imageid || '',
+                imageUrl: item.image_url || item.imageurl || '',
+            }));
+
+            setInventory(processedData);
+        } catch (error) {
+            console.error("Error loading inventory:", error);
+            alert("Failed to load inventory data. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Handle adding a new item
     const handleAddItem = async (newItem) => {
         try {
-            // Add to database and get ID
-            const itemWithId = await addItem(newItem);
+            // Upload image to Google Drive if provided
+            if (newItem.imageFile) {
+                const imageData = await uploadImageToDrive(newItem.imageFile);
+                newItem.imageId = imageData.fileId;
+                newItem.imageUrl = imageData.directUrl || imageData.webViewLink;
+                delete newItem.imageFile; // Remove the file object
+            }
+
+            // Add to Google Sheets
+            const addedItem = await addInventoryItem(spreadsheetId, newItem);
 
             // Update local state
-            setInventory([...inventory, itemWithId]);
+            setInventory([...inventory, addedItem]);
             setIsAddModalOpen(false);
         } catch (error) {
             console.error("Error adding item:", error);
@@ -34,8 +85,16 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     // Handle updating an item
     const handleUpdateItem = async (updatedItem) => {
         try {
-            // Update in database
-            await updateItem(updatedItem);
+            // Upload new image if provided
+            if (updatedItem.imageFile) {
+                const imageData = await uploadImageToDrive(updatedItem.imageFile);
+                updatedItem.imageId = imageData.fileId;
+                updatedItem.imageUrl = imageData.directUrl || imageData.webViewLink;
+                delete updatedItem.imageFile; // Remove the file object
+            }
+
+            // Update in Google Sheets
+            await updateInventoryItem(spreadsheetId, updatedItem);
 
             // Update local state
             const updatedInventory = inventory.map(item =>
@@ -54,8 +113,8 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         if (!confirm("Are you sure you want to delete this item?")) return;
 
         try {
-            // Delete from database
-            await deleteItem(itemId);
+            // Delete from Google Sheets
+            await deleteInventoryItem(spreadsheetId, itemId);
 
             // Update local state
             setInventory(inventory.filter(item => item.id !== itemId));
@@ -72,9 +131,9 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         if (!confirm(`Are you sure you want to delete ${selectedItems.length} items?`)) return;
 
         try {
-            // Delete from database one by one
+            // Delete from Google Sheets one by one
             for (const itemId of selectedItems) {
-                await deleteItem(itemId);
+                await deleteInventoryItem(spreadsheetId, itemId);
             }
 
             // Update local state
@@ -86,10 +145,67 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         }
     };
 
+    // Handle selling an item
+    const handleSellItem = async (item, quantity) => {
+        try {
+            const updatedItem = {
+                ...item,
+                quantity: item.quantity - quantity
+            };
+
+            // Update the item quantity in Google Sheets
+            await updateInventoryItem(spreadsheetId, updatedItem);
+
+            // Update local state
+            const updatedInventory = inventory.map(invItem =>
+                invItem.id === item.id ? updatedItem : invItem
+            );
+
+            setInventory(updatedInventory);
+
+            // Optionally, record the sale in a separate "Sales" sheet
+            // This would require another API call to add a row to that sheet
+
+            return true;
+        } catch (error) {
+            console.error("Error selling item:", error);
+            alert("Failed to process sale. Please try again.");
+            return false;
+        }
+    };
+
+    // Upload image to Google Drive
+    const uploadImageToDrive = async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Upload to Google Drive using the API
+        const response = await fetch('/api/drive/upload', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to upload image to Google Drive');
+        }
+
+        // Get the file data from the response
+        const data = await response.json();
+
+        // Get a direct URL for the image
+        const urlResponse = await fetch(`/api/drive/get-url?fileId=${data.fileId}`);
+        if (!urlResponse.ok) {
+            throw new Error('Failed to get image URL');
+        }
+
+        return await urlResponse.json();
+    };
+
     // Filter inventory based on search and category
     const filteredInventory = inventory.filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch =
+            (item.name && item.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
         const matchesCategory = filterCategory === '' || item.category === filterCategory;
 
         return matchesSearch && matchesCategory;
@@ -100,11 +216,11 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         let comparison = 0;
 
         if (sortBy === 'name') {
-            comparison = a.name.localeCompare(b.name);
+            comparison = (a.name || '').localeCompare(b.name || '');
         } else if (sortBy === 'price') {
-            comparison = a.price - b.price;
+            comparison = (a.price || 0) - (b.price || 0);
         } else if (sortBy === 'quantity') {
-            comparison = a.quantity - b.quantity;
+            comparison = (a.quantity || 0) - (b.quantity || 0);
         }
 
         return sortDirection === 'asc' ? comparison : -comparison;
@@ -115,6 +231,39 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         setIsFilterExpanded(!isFilterExpanded);
     };
 
+    // Show loading state
+    if (status === 'loading' || (status === 'authenticated' && isLoading)) {
+        return (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div className="flex justify-center items-center h-64">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
+                        <p className="mt-4 text-gray-600">Loading inventory...</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Show login prompt if not authenticated
+    if (status !== 'authenticated') {
+        return (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <div className="flex justify-center items-center h-64">
+                    <div className="text-center">
+                        <p className="text-lg text-gray-700 mb-4">Please sign in to access inventory management</p>
+                        <button
+                            onClick={() => signIn('google')}
+                            className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-6 py-2 rounded transition-colors"
+                        >
+                            Sign in with Google
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -123,7 +272,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="bg-primary-700 hover:bg-primary-500 text-[#fff] font-medium px-4 py-2 rounded transition-colors"
+                        className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-4 py-2 rounded transition-colors"
                     >
                         + New Item
                     </button>
@@ -221,6 +370,35 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 </div>
             </div>
 
+            {/* Spreadsheet ID input */}
+            <div className="mb-6 bg-white rounded-lg shadow-md p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="flex-grow">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Google Sheets ID
+                        </label>
+                        <input
+                            type="text"
+                            value={spreadsheetId}
+                            onChange={(e) => setSpreadsheetId(e.target.value)}
+                            placeholder="Enter your Google Sheets ID..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                        />
+                    </div>
+                    <div className="sm:self-end">
+                        <button
+                            onClick={loadInventory}
+                            className="w-full sm:w-auto bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded transition-colors"
+                        >
+                            Load Inventory
+                        </button>
+                    </div>
+                </div>
+                <p className="mt-2 text-xs text-gray-500">
+                    Your inventory should be in a sheet named "Inventory" with headers in row 1.
+                </p>
+            </div>
+
             {/* Results count */}
             <div className="mb-4 text-sm text-gray-500">
                 Showing {sortedInventory.length} of {inventory.length} items
@@ -234,7 +412,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 setSelectedItems={setSelectedItems}
                 onUpdateItem={handleUpdateItem}
                 onDeleteItem={handleDeleteItem}
-                onSellItem={onSellItem}
+                onSellItem={handleSellItem}
             />
 
             {isAddModalOpen && (

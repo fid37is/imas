@@ -322,7 +322,7 @@ export default function InventoryList({
                                 value={sellQuantity}
                                 onChange={(e) =>
                                     setSellQuantity(
-                                        Math.min(parseInt(e.target.value), sellModalItem.quantity)
+                                        Math.min(parseInt(e.target.value) || 1, sellModalItem.quantity)
                                     )
                                 }
                                 min="1"

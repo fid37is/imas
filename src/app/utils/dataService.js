@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { functions, storage } from "../firebase/config";
+import { functions } from "../firebase/config";
 
 // Helper for debugging - Next.js safe way to check environment
 const isDev = process.env.NODE_ENV === 'development';
@@ -106,6 +106,12 @@ export const getInventory = async () => {
     try {
         if (isDev) console.log("Fetching inventory");
         
+        // Check if functions is properly initialized
+        if (!functions) {
+            console.error("Firebase functions client is not initialized");
+            return [];
+        }
+        
         const getInventoryFunction = httpsCallable(functions, 'getInventory');
         const result = await getInventoryFunction();
         if (isDev) console.log("Inventory fetched successfully:", result.data?.length || 0, "items");
@@ -132,6 +138,12 @@ export const getInventory = async () => {
 export const getSales = async () => {
     try {
         if (isDev) console.log("Fetching sales records");
+        
+        // Check if functions is properly initialized
+        if (!functions) {
+            console.error("Firebase functions client is not initialized");
+            return [];
+        }
         
         const getSalesFunction = httpsCallable(functions, 'getSales');
         const result = await getSalesFunction();
@@ -206,6 +218,12 @@ export const recordSale = async (item, quantity) => {
 export const uploadImageToDrive = async (file) => {
     try {
         if (isDev) console.log("Uploading image:", file.name);
+        
+        // Check if storage is properly initialized
+        if (!storage) {
+            console.error("Firebase storage client is not initialized");
+            throw new Error("Storage not initialized");
+        }
         
         // First, upload to Firebase Storage as a fallback/cache
         const storageRef = ref(storage, `inventory-images/${Date.now()}-${file.name}`);
