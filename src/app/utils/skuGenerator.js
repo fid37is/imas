@@ -1,33 +1,44 @@
+// src/utils/skuGenerator.js
+
 /**
- * Generates a SKU based on item name and category
+ * Generate a SKU based on item name and category
  * Format: CAT-NAME-RANDOM
  * 
- * @param {string} name - Item name
- * @param {string} category - Item category
- * @returns {string} - Generated SKU
+ * @param {String} name - Product name
+ * @param {String} category - Product category
+ * @returns {String} Generated SKU
  */
 export const generateSKU = (name, category) => {
-    // Get first 3 characters of category (uppercase)
-    const categoryCode = category.substring(0, 3).toUpperCase();
-    
-    // Get first 4 characters of name (uppercase), removing spaces
-    const nameCode = name.replace(/\s/g, '').substring(0, 4).toUpperCase();
-    
-    // Generate random 4-digit number
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    
+    if (!name || !category) {
+        return '';
+    }
+
+    // Format the category prefix (first 3 letters, uppercase)
+    const categoryPrefix = category
+        .slice(0, 3)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+    // Format the name part (first 5 letters, uppercase)
+    const namePart = name
+        .slice(0, 5)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+    // Generate random suffix (4 digits)
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+
     // Combine all parts with hyphens
-    return `${categoryCode}-${nameCode}-${randomNum}`;
+    return `${categoryPrefix}-${namePart}-${randomSuffix}`;
 };
 
 /**
- * Validates if a SKU is in the correct format
- * 
- * @param {string} sku - SKU to validate
- * @returns {boolean} - True if valid, false otherwise
+ * Validate SKU format
+ * @param {String} sku - The SKU to validate
+ * @returns {Boolean} Whether the SKU is valid
  */
-export const validateSKU = (sku) => {
-    // Basic validation - adjust the regex pattern based on your SKU format requirements
-    const skuPattern = /^[A-Z]{3}-[A-Z]{1,4}-\d{4}$/;
-    return skuPattern.test(sku);
+export const isValidSKU = (sku) => {
+    // Basic validation - SKUs should be in format XXX-XXXXX-XXXX
+    const skuRegex = /^[A-Z0-9]{1,3}-[A-Z0-9]{1,5}-[0-9]{4}$/;
+    return skuRegex.test(sku);
 };

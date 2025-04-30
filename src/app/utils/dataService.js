@@ -1,50 +1,46 @@
-// utils/dataService.js
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from './firebase'; 
-
-const functions = getFunctions(app);
-
-// Functions for Google Sheets operations
-const getInventoryFromSheets = httpsCallable(functions, 'getInventoryFromSheets');
-const addInventoryItemToSheets = httpsCallable(functions, 'addInventoryItemToSheets');
-const updateInventoryItemInSheets = httpsCallable(functions, 'updateInventoryItemInSheets');
-const deleteInventoryItemFromSheets = httpsCallable(functions, 'deleteInventoryItemFromSheets');
-const recordSaleInSheets = httpsCallable(functions, 'recordSaleInSheets');
-const getSalesFromSheets = httpsCallable(functions, 'getSalesFromSheets');
+// src/utils/dataService.js
 
 /**
- * Get all inventory items from Google Sheets
+ * Fetch all inventory items
+ * @returns {Array} Array of inventory items
  */
 export const getInventory = async () => {
     try {
-        const result = await getInventoryFromSheets();
-        return result.data || [];
+        const response = await fetch('/api/items');
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to fetch inventory');
+        }
+
+        return await response.json();
     } catch (error) {
-        console.error('Error getting inventory:', error);
+        console.error('Error fetching inventory:', error);
         throw error;
     }
 };
 
 /**
- * Get all sales records from Google Sheets
+ * Add a new item to inventory
+ * @param {Object} item - The item to add
+ * @returns {Object} The added item with ID
  */
-export const getSales = async () => {
+export const addItem = async (item) => {
     try {
-        const result = await getSalesFromSheets();
-        return result.data || [];
-    } catch (error) {
-        console.error('Error getting sales data:', error);
-        throw error;
-    }
-};
+        const response = await fetch('/api/items', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(item),
+        });
 
-/**
- * Add a new inventory item to Google Sheets
- */
-export const addItem = async (itemData) => {
-    try {
-        const result = await addInventoryItemToSheets(itemData);
-        return result.data;
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to add item');
+        }
+
+        return await response.json();
     } catch (error) {
         console.error('Error adding item:', error);
         throw error;
@@ -52,12 +48,30 @@ export const addItem = async (itemData) => {
 };
 
 /**
- * Update an existing inventory item in Google Sheets
+ * Update an existing item
+ * @param {Object} item - The item to update (must include id)
+ * @returns {Object} The updated item
  */
-export const updateItem = async (itemData) => {
+export const updateItem = async (item) => {
     try {
-        await updateInventoryItemInSheets(itemData);
-        return { success: true };
+        if (!item.id) {
+            throw new Error('Item ID is required for update');
+        }
+
+        const response = await fetch(`/api/items/${item.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(item),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to update item');
+        }
+
+        return await response.json();
     } catch (error) {
         console.error('Error updating item:', error);
         throw error;
@@ -65,12 +79,22 @@ export const updateItem = async (itemData) => {
 };
 
 /**
- * Delete an inventory item from Google Sheets
+ * Delete an item by ID
+ * @param {String} id - The ID of the item to delete
+ * @returns {Object} Status response
  */
-export const deleteItem = async (itemId) => {
+export const deleteItem = async (id) => {
     try {
-        await deleteInventoryItemFromSheets({ id: itemId });
-        return { success: true };
+        const response = await fetch(`/api/items/${id}`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to delete item');
+        }
+
+        return await response.json();
     } catch (error) {
         console.error('Error deleting item:', error);
         throw error;
@@ -78,30 +102,72 @@ export const deleteItem = async (itemId) => {
 };
 
 /**
- * Record a sale in Google Sheets and update inventory
+ * Record a sale for an item
+ * @param {Object} item - The item being sold
+ * @param {Number} quantity - Quantity sold
+ * @returns {Object} Updated item with new quantity
  */
 export const recordSale = async (item, quantity) => {
     try {
-        // Calculate new quantity after sale
-        const newQuantity = item.quantity - quantity;
-
-        if (newQuantity < 0) {
-            throw new Error('Not enough items in stock');
+        // Validate inputs
+        if (!item.id || !quantity || quantity <= 0) {
+            throw new Error('Invalid sale parameters');
         }
 
-        // Record the sale
-        const saleData = {
-            itemId: item.id,
-            itemName: item.name,
-            quantity: quantity,
-            price: item.price,
-            newQuantity: newQuantity // Pass new quantity for inventory update
-        };
+        if (quantity > item.quantity) {
+            throw new Error('Not enough inventory to complete sale');
+        }
 
-        const result = await recordSaleInSheets(saleData);
-        return result.data;
+        const response = await fetch('/api/items/sell', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ itemId: item.id, quantity }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to record sale');
+        }
+
+        return await response.json();
     } catch (error) {
         console.error('Error recording sale:', error);
+        throw error;
+    }
+};
+
+/**
+ * Upload an image for an item
+ * @param {File} file - The image file to upload
+ * @param {String} itemName - Optional item name for the file
+ * @returns {String} URL of the uploaded image
+ */
+export const uploadItemImage = async (file, itemName = '') => {
+    try {
+        // Create form data for the file upload
+        const formData = new FormData();
+        formData.append('file', file);
+
+        if (itemName) {
+            formData.append('itemName', itemName);
+        }
+
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to upload image');
+        }
+
+        const result = await response.json();
+        return result.imageUrl;
+    } catch (error) {
+        console.error('Error uploading image:', error);
         throw error;
     }
 };

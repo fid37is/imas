@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase/config";
-import { getInventory, getSales, recordSale } from "./utils/dataService";
+
 
 import Login from "./components/Login";
 import Navbar from "./components/Navbar";

@@ -233,6 +233,15 @@ export default function InventoryList() {
         });
     };
 
+    // Calculate profit safely
+    const calculateProfit = (price, costPrice, quantity) => {
+        const safePrice = typeof price === 'number' ? price : 0;
+        const safeCostPrice = typeof costPrice === 'number' ? costPrice : 0;
+        const safeQuantity = typeof quantity === 'number' ? quantity : 0;
+        
+        return ((safePrice - safeCostPrice) * safeQuantity).toFixed(2);
+    };
+
     return (
         <div className="space-y-4">
             {/* Action buttons */}
@@ -319,7 +328,7 @@ export default function InventoryList() {
                                     {items.map((item) => (
                                         <tr
                                             key={item.id}
-                                            className={`${item.quantity <= item.lowStockThreshold ? "bg-red-50" : ""
+                                            className={`${item.quantity <= (item.lowStockThreshold || 0) ? "bg-red-50" : ""
                                                 } hover:bg-gray-50`}
                                         >
                                             <td className="px-4 py-3">
@@ -354,12 +363,12 @@ export default function InventoryList() {
                                                     <input
                                                         type="text"
                                                         name="name"
-                                                        value={tempItem.name}
+                                                        value={tempItem.name || ""}
                                                         onChange={handleInputChange}
                                                         className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                                                     />
                                                 ) : (
-                                                    item.name
+                                                    item.name || ""
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -367,12 +376,12 @@ export default function InventoryList() {
                                                     <input
                                                         type="text"
                                                         name="category"
-                                                        value={tempItem.category}
+                                                        value={tempItem.category || ""}
                                                         onChange={handleInputChange}
                                                         className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                                                     />
                                                 ) : (
-                                                    item.category
+                                                    item.category || ""
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -380,12 +389,12 @@ export default function InventoryList() {
                                                     <input
                                                         type="text"
                                                         name="sku"
-                                                        value={tempItem.sku}
+                                                        value={tempItem.sku || ""}
                                                         onChange={handleInputChange}
                                                         className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                                                     />
                                                 ) : (
-                                                    item.sku
+                                                    item.sku || ""
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -393,14 +402,14 @@ export default function InventoryList() {
                                                     <input
                                                         type="number"
                                                         name="price"
-                                                        value={tempItem.price}
+                                                        value={tempItem.price || 0}
                                                         onChange={handleInputChange}
                                                         step="0.01"
                                                         min="0"
                                                         className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                                                     />
                                                 ) : (
-                                                    `$${item.price.toFixed(2)}`
+                                                    `$${(item.price || 0).toFixed(2)}`
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -408,14 +417,14 @@ export default function InventoryList() {
                                                     <input
                                                         type="number"
                                                         name="costPrice"
-                                                        value={tempItem.costPrice}
+                                                        value={tempItem.costPrice || 0}
                                                         onChange={handleInputChange}
                                                         step="0.01"
                                                         min="0"
                                                         className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                                                     />
                                                 ) : (
-                                                    `$${item.costPrice.toFixed(2)}`
+                                                    `$${(item.costPrice || 0).toFixed(2)}`
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
@@ -424,7 +433,7 @@ export default function InventoryList() {
                                                         <input
                                                             type="number"
                                                             name="quantity"
-                                                            value={tempItem.quantity}
+                                                            value={tempItem.quantity || 0}
                                                             onChange={handleInputChange}
                                                             min="0"
                                                             className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
@@ -441,8 +450,8 @@ export default function InventoryList() {
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center">
-                                                        {item.quantity}
-                                                        {item.quantity <= item.lowStockThreshold && (
+                                                        {item.quantity || 0}
+                                                        {(item.quantity || 0) <= (item.lowStockThreshold || 0) && (
                                                             <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                                                 Low Stock
                                                             </span>
@@ -476,8 +485,8 @@ export default function InventoryList() {
                                                         </button>
                                                         <button
                                                             onClick={() => openSellModal(item)}
-                                                            disabled={item.quantity < 1}
-                                                            className={`px-2 py-1 text-xs rounded transition-colors ${item.quantity < 1
+                                                            disabled={(item.quantity || 0) < 1}
+                                                            className={`px-2 py-1 text-xs rounded transition-colors ${(item.quantity || 0) < 1
                                                                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                                                                 : "bg-accent-100 text-accent-700 hover:bg-accent-200"
                                                                 }`}
@@ -507,22 +516,22 @@ export default function InventoryList() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-lg w-96 max-w-full mx-4">
                         <h3 className="text-lg font-semibold mb-4 text-primary-600">
-                            Sell {sellModalItem.name}
+                            Sell {sellModalItem.name || ""}
                         </h3>
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Quantity (Available: {sellModalItem.quantity})
+                                Quantity (Available: {sellModalItem.quantity || 0})
                             </label>
                             <input
                                 type="number"
                                 value={sellQuantity}
                                 onChange={(e) =>
                                     setSellQuantity(
-                                        Math.min(parseInt(e.target.value) || 1, sellModalItem.quantity)
+                                        Math.min(parseInt(e.target.value) || 1, sellModalItem.quantity || 0)
                                     )
                                 }
                                 min="1"
-                                max={sellModalItem.quantity}
+                                max={sellModalItem.quantity || 0}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
                             />
                         </div>
@@ -530,23 +539,19 @@ export default function InventoryList() {
                             <p className="text-sm text-gray-600 flex justify-between">
                                 <span>Sell Price:</span>
                                 <span className="font-semibold">
-                                    ${sellModalItem.price.toFixed(2)}
+                                ${(sellModalItem.price || 0).toFixed(2)}
                                 </span>
                             </p>
                             <p className="text-sm text-gray-600 flex justify-between mt-1">
                                 <span>Sale Total:</span>
                                 <span className="font-semibold">
-                                    ${(sellModalItem.price * sellQuantity).toFixed(2)}
+                                    ${((sellModalItem.price || 0) * sellQuantity).toFixed(2)}
                                 </span>
                             </p>
                             <p className="text-sm text-accent-600 flex justify-between mt-1">
                                 <span>Profit:</span>
                                 <span className="font-semibold">
-                                    $
-                                    {(
-                                        (sellModalItem.price - sellModalItem.costPrice) *
-                                        sellQuantity
-                                    ).toFixed(2)}
+                                    ${calculateProfit(sellModalItem.price, sellModalItem.costPrice, sellQuantity)}
                                 </span>
                             </p>
                         </div>
@@ -561,7 +566,7 @@ export default function InventoryList() {
                                 onClick={() => handleSellItem(sellModalItem, sellQuantity)}
                                 className="px-4 py-2 text-sm bg-accent-500 text-primary-700 font-medium rounded-md hover:bg-accent-600 transition-colors"
                                 disabled={
-                                    sellQuantity < 1 || sellQuantity > sellModalItem.quantity
+                                    sellQuantity < 1 || sellQuantity > (sellModalItem.quantity || 0)
                                 }
                             >
                                 Complete Sale

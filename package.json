@@ -2,6 +2,7 @@
   "name": "imas",
   "version": "0.1.0",
   "private": true,
+  "proxy": "https://us-central1-imas-toolup.cloudfunctions.net",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,6 +12,7 @@
   "dependencies": {
     "@reduxjs/toolkit": "^2.7.0",
     "chart.js": "^4.4.9",
+    "cors": "^2.8.5",
     "firebase": "^11.6.1",
     "formidable": "^3.5.4",
     "googleapis": "^148.0.0",
