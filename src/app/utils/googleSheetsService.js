@@ -1,408 +1,487 @@
-/**
- * Service for interacting with Google Sheets API
- * Modified for static site exports (no server-side API routes)
- */
+// utils/googleSheetsService.js
+import { google } from 'googleapis';
 
-// Google API configuration - for static exports, these need to be public values
-// IMPORTANT: For production, use restricted API keys with proper referrer restrictions
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY; // Required for public access without OAuth
-const SPREADSHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SPREADSHEET_ID;
+// Create a OAuth2 client
+function getOAuth2Client() {
+    return new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+    );
+}
 
-// Sheet names/ranges
-const INVENTORY_SHEET_RANGE = 'Inventory!A2:I';
-const SALES_SHEET_RANGE = 'Sales!A2:G';
+// Get the Sheets API with authenticated client
+async function getSheetsApi(accessToken) {
+    const oauth2Client = getOAuth2Client();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    return google.sheets({ version: 'v4', auth: oauth2Client });
+}
 
-// Column indices in the inventory sheet
-const INVENTORY_COLUMNS = {
-    ID: 0,
-    NAME: 1,
-    CATEGORY: 2,
-    SKU: 3,
-    PRICE: 4,
-    COST_PRICE: 5,
-    QUANTITY: 6,
-    LOW_STOCK_THRESHOLD: 7,
-    IMAGE_URL: 8
-};
-
-// Track initialization state
-let isInitialized = false;
-let initializationPromise = null;
-let initializationAttempts = 0;
-const MAX_INITIALIZATION_ATTEMPTS = 3;
-
-// Local storage keys for caching
-const STORAGE_KEYS = {
-    INVENTORY: 'inventory_data',
-    SALES: 'sales_data',
-    TIMESTAMP: 'data_timestamp'
-};
-
-// Cache expiration time (12 hours in milliseconds)
-const CACHE_EXPIRATION = 12 * 60 * 60 * 1000;
-
-/**
- * Load the Google API client with retry logic
- * @returns {Promise} Promise that resolves when the API client is loaded
- */
-export const initGoogleAPI = () => {
-    // Return existing promise if initialization is in progress
-    if (initializationPromise) {
-        return initializationPromise;
+// Get spreadsheet ID from environment variables or create a new one
+async function getSpreadsheetId(accessToken) {
+    // If spreadsheet ID is already set in environment
+    if (process.env.GOOGLE_SHEETS_ID) {
+        return process.env.GOOGLE_SHEETS_ID;
     }
 
-    // Track attempts
-    initializationAttempts = 0;
-    
-    // Create a new initialization promise
-    initializationPromise = new Promise((resolve, reject) => {
-        loadGapiWithRetry(resolve, reject);
+    // Create a new spreadsheet
+    try {
+        const sheets = await getSheetsApi(accessToken);
+        const response = await sheets.spreadsheets.create({
+            resource: {
+                properties: {
+                    title: 'Inventory Management System',
+                },
+                sheets: [
+                    {
+                        properties: {
+                            title: 'Inventory',
+                            gridProperties: {
+                                frozenRowCount: 1,
+                            },
+                        },
+                    },
+                    {
+                        properties: {
+                            title: 'Sales',
+                            gridProperties: {
+                                frozenRowCount: 1,
+                            },
+                        },
+                    },
+                ],
+            },
+        });
+
+        // Return the new spreadsheet ID
+        return response.data.spreadsheetId;
+    } catch (error) {
+        console.error('Error creating spreadsheet:', error);
+        throw new Error(`Failed to create spreadsheet: ${error.message}`);
+    }
+}
+
+// Define our expected column headers for each sheet
+const INVENTORY_HEADERS = [
+    'ID',
+    'Name',
+    'Category',
+    'Price',
+    'Cost Price',
+    'Quantity',
+    'SKU',
+    'Low Stock Threshold',
+    'Description',
+    'Image URL',
+    'Image ID'
+];
+
+const SALES_HEADERS = [
+    'ID',
+    'Item ID',
+    'Item Name',
+    'Quantity',
+    'Price',
+    'Date'
+];
+
+/**
+ * Create a header mapping object that maps column names to their indices
+ * @param {Array} headers - Array of header names
+ * @returns {Object} - Object mapping header names to column indices
+ */
+function createHeaderMapping(headers) {
+    const mapping = {};
+    headers.forEach((header, index) => {
+        // Normalize header name (lowercase, no spaces)
+        const normalizedHeader = header.toLowerCase().replace(/\s+/g, '');
+        mapping[normalizedHeader] = index;
     });
-
-    return initializationPromise;
-};
-
-/**
- * Load the Google API client with retry logic
- * @param {Function} resolve - Promise resolver function
- * @param {Function} reject - Promise reject function
- */
-const loadGapiWithRetry = (resolve, reject) => {
-    // Check if we've reached the maximum number of attempts
-    if (initializationAttempts >= MAX_INITIALIZATION_ATTEMPTS) {
-        console.error(`Failed to load Google API after ${MAX_INITIALIZATION_ATTEMPTS} attempts`);
-        initializationPromise = null;
-        reject(new Error(`Failed to load Google API after ${MAX_INITIALIZATION_ATTEMPTS} attempts`));
-        return;
-    }
-
-    initializationAttempts++;
-    console.log(`Attempting to load Google API (attempt ${initializationAttempts})`);
-
-    // Use multiple CDN sources for redundancy
-    const apiUrls = [
-        'https://apis.google.com/js/api.js',
-        'https://www.googleapis.com/js/api.js',
-        'https://ajax.googleapis.com/ajax/libs/googleapis/1.0/googleapis.js'
-    ];
-    
-    const scriptUrl = apiUrls[initializationAttempts - 1] || apiUrls[0];
-    
-    // Check if gapi is already loaded
-    if (window.gapi) {
-        loadGapiClient(resolve, reject);
-        return;
-    }
-
-    const script = document.createElement('script');
-    script.src = scriptUrl;
-    
-    // Set a timeout for script loading
-    const timeoutId = setTimeout(() => {
-        console.warn(`Google API script load timed out from ${scriptUrl}`);
-        script.onerror = null; // Remove the error handler to prevent duplicate calls
-        loadGapiWithRetry(resolve, reject); // Try the next URL
-    }, 5000); // 5 second timeout
-    
-    script.onload = () => {
-        clearTimeout(timeoutId);
-        console.log('Google API script loaded successfully');
-        loadGapiClient(resolve, reject);
-    };
-    
-    script.onerror = () => {
-        clearTimeout(timeoutId);
-        console.warn(`Failed to load Google API script from ${scriptUrl}`);
-        loadGapiWithRetry(resolve, reject); // Try the next URL
-    };
-    
-    document.body.appendChild(script);
-};
+    return mapping;
+}
 
 /**
- * Helper to load the gapi client
- * @param {Function} resolve - Promise resolver function
- * @param {Function} reject - Promise reject function
+ * Initialize a sheet with headers if needed
+ * @param {string} spreadsheetId - The ID of the spreadsheet
+ * @param {string} accessToken - Google OAuth access token
+ * @param {string} sheetName - Name of the sheet to initialize
+ * @param {Array} headers - Array of headers to set
  */
-const loadGapiClient = (resolve, reject) => {
-    if (!window.gapi) {
-        reject(new Error('Google API client not available'));
-        initializationPromise = null;
-        return;
-    }
+async function initializeSheet(spreadsheetId, accessToken, sheetName, headers) {
+    try {
+        const sheets = await getSheetsApi(accessToken);
 
-    window.gapi.load('client', async () => {
-        try {
-            // Initialize the client with timeout
-            const clientInitPromise = window.gapi.client.init({
-                apiKey: API_KEY,
-                discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
+        // Check if headers exist
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${sheetName}!A1:${String.fromCharCode(65 + headers.length - 1)}1`,
+        });
+
+        if (!response.data.values || response.data.values.length === 0) {
+            // Set headers
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `${sheetName}!A1:${String.fromCharCode(65 + headers.length - 1)}1`,
+                valueInputOption: 'RAW',
+                resource: {
+                    values: [headers],
+                },
             });
-            
-            // Add a timeout to the client initialization
-            const timeoutPromise = new Promise((_, rejectTimeout) => {
-                setTimeout(() => rejectTimeout(new Error('Google API client initialization timed out')), 10000);
-            });
-            
-            await Promise.race([clientInitPromise, timeoutPromise]);
-            
-            isInitialized = true;
-            console.log('Google API initialized successfully');
-            resolve(true);
-        } catch (error) {
-            console.error('Error initializing Google API client:', error);
-            initializationPromise = null;
-            reject(error);
+        }
+    } catch (error) {
+        console.error(`Error initializing ${sheetName} sheet:`, error);
+        throw new Error(`Failed to initialize ${sheetName} sheet: ${error.message}`);
+    }
+}
+
+/**
+ * Initialize the inventory sheet with headers if needed
+ * @param {string} spreadsheetId - The ID of the spreadsheet
+ * @param {string} accessToken - Google OAuth access token
+ */
+async function initializeInventorySheet(spreadsheetId, accessToken) {
+    return initializeSheet(spreadsheetId, accessToken, 'Inventory', INVENTORY_HEADERS);
+}
+
+/**
+ * Initialize the sales sheet with headers if needed
+ * @param {string} spreadsheetId - The ID of the spreadsheet
+ * @param {string} accessToken - Google OAuth access token
+ */
+async function initializeSalesSheet(spreadsheetId, accessToken) {
+    return initializeSheet(spreadsheetId, accessToken, 'Sales', SALES_HEADERS);
+}
+
+/**
+ * Convert an item object to row values based on header mapping
+ * @param {Object} item - The item object
+ * @param {Object} headerMapping - Mapping of header names to column indices
+ * @param {Array} headers - The actual headers in the sheet
+ * @returns {Array} - Array of values ordered according to headers
+ */
+function itemToRowValues(item, headerMapping, headers) {
+    // Initialize array with empty strings
+    const rowValues = Array(headers.length).fill('');
+    
+    // Map each property from the item to the correct position in the row
+    Object.entries(item).forEach(([key, value]) => {
+        const normalizedKey = key.toLowerCase();
+        if (headerMapping[normalizedKey] !== undefined) {
+            rowValues[headerMapping[normalizedKey]] = value === undefined ? '' : value;
         }
     });
-};
-
-/**
- * Get cached data from local storage
- * @param {string} type - Type of data ('inventory' or 'sales')
- * @returns {Array|null} Cached data or null if not available
- */
-const getCachedData = (type) => {
-    if (typeof window === 'undefined') return null;
     
-    try {
-        const timestamp = localStorage.getItem(STORAGE_KEYS.TIMESTAMP);
-        if (!timestamp || Date.now() - parseInt(timestamp, 10) > CACHE_EXPIRATION) {
-            return null; // Cache expired
-        }
-        
-        const data = localStorage.getItem(STORAGE_KEYS[type.toUpperCase()]);
-        return data ? JSON.parse(data) : null;
-    } catch (error) {
-        console.warn('Error reading from cache:', error);
-        return null;
-    }
-};
+    return rowValues;
+}
 
 /**
- * Cache data in local storage
- * @param {string} type - Type of data ('inventory' or 'sales')
- * @param {Array} data - Data to cache
+ * Convert row values to an object based on header mapping
+ * @param {Array} row - Array of values from a row
+ * @param {Object} headerMapping - Mapping of header names to column indices
+ * @param {Array} headers - The actual headers in the sheet
+ * @returns {Object} - Object with properties mapped from the row
  */
-const cacheData = (type, data) => {
-    if (typeof window === 'undefined') return;
+function rowToItem(row, headerMapping, headers) {
+    const item = {};
     
-    try {
-        localStorage.setItem(STORAGE_KEYS[type.toUpperCase()], JSON.stringify(data));
-        localStorage.setItem(STORAGE_KEYS.TIMESTAMP, Date.now().toString());
-    } catch (error) {
-        console.warn('Error writing to cache:', error);
-    }
-};
-
-/**
- * Parse sheet row data into inventory item object
- * @param {Array} row - Row data from Google Sheets
- * @returns {Object} Inventory item object
- */
-const parseInventoryRow = (row) => {
-    // Handle potentially missing values in the row
-    const safeRow = Array.isArray(row) ? row : [];
-
-    return {
-        id: safeRow[INVENTORY_COLUMNS.ID] || generateId(),
-        name: safeRow[INVENTORY_COLUMNS.NAME] || '',
-        category: safeRow[INVENTORY_COLUMNS.CATEGORY] || '',
-        sku: safeRow[INVENTORY_COLUMNS.SKU] || '',
-        price: parseFloat(safeRow[INVENTORY_COLUMNS.PRICE]) || 0,
-        costPrice: parseFloat(safeRow[INVENTORY_COLUMNS.COST_PRICE]) || 0,
-        quantity: parseInt(safeRow[INVENTORY_COLUMNS.QUANTITY], 10) || 0,
-        lowStockThreshold: parseInt(safeRow[INVENTORY_COLUMNS.LOW_STOCK_THRESHOLD], 10) || 5,
-        imageUrl: safeRow[INVENTORY_COLUMNS.IMAGE_URL] || ''
-    };
-};
-
-/**
- * Generate a unique ID for new items
- * @returns {string} Unique ID
- */
-const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-};
-
-/**
- * Perform an API request with retry logic
- * @param {Function} apiCall - The API call function to execute
- * @param {number} retries - Number of retries (default: 2)
- * @returns {Promise} Promise that resolves with the API response
- */
-const performWithRetry = async (apiCall, retries = 2) => {
-    try {
-        return await apiCall();
-    } catch (error) {
-        if (retries <= 0) {
-            throw error;
+    headers.forEach((header, index) => {
+        const normalizedHeader = header.toLowerCase().replace(/\s+/g, '');
+        const value = row[index] || '';
+        
+        // Convert numeric fields
+        if (['price', 'costprice', 'quantity', 'lowstockthreshold'].includes(normalizedHeader)) {
+            item[normalizedHeader] = value === '' ? 0 : Number(value);
+        } else {
+            item[normalizedHeader] = value;
         }
-        
-        console.warn(`API call failed, retrying... (${retries} attempts left)`, error);
-        
-        // Check if we need to reinitialize the API
-        if (error.status === 401 || error.status === 403) {
-            isInitialized = false;
-            initializationPromise = null;
-            await initGoogleAPI();
-        }
-        
-        // Exponential backoff
-        const delay = 1000 * (3 - retries);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        return performWithRetry(apiCall, retries - 1);
-    }
-};
-
-/**
- * Get all inventory items
- * @param {boolean} forceRefresh - Whether to force refresh from API
- * @returns {Promise<Array>} Array of inventory items
- */
-export const getInventory = async (forceRefresh = false) => {
-    // Try to get cached data first
-    if (!forceRefresh) {
-        const cachedData = getCachedData('inventory');
-        if (cachedData) {
-            console.log('Using cached inventory data');
-            return cachedData;
-        }
-    }
+    });
     
-    try {
-        // Ensure API is initialized
-        if (!isInitialized) {
-            await initGoogleAPI();
-        }
-
-        const response = await performWithRetry(() => 
-            window.gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: INVENTORY_SHEET_RANGE
-            })
-        );
-
-        const rows = response.result.values || [];
-        const inventoryData = rows.map(row => parseInventoryRow(row));
-        
-        // Cache the data for future use
-        cacheData('inventory', inventoryData);
-        
-        return inventoryData;
-    } catch (error) {
-        console.error("Failed to fetch inventory from Google Sheets:", error);
-        
-        // Try to use cached data even if it's expired
-        const cachedData = getCachedData('inventory');
-        if (cachedData) {
-            console.log('Using expired cached inventory data due to API failure');
-            return cachedData;
-        }
-        
-        // If no cached data, return empty array
-        console.warn('No cached inventory data available, returning empty array');
-        return [];
-    }
-};
-
-/**
- * Get all sales records
- * @param {boolean} forceRefresh - Whether to force refresh from API
- * @returns {Promise<Array>} Array of sales records
- */
-export const getSales = async (forceRefresh = false) => {
-    // Try to get cached data first
-    if (!forceRefresh) {
-        const cachedData = getCachedData('sales');
-        if (cachedData) {
-            console.log('Using cached sales data');
-            return cachedData;
-        }
-    }
-    
-    try {
-        // Ensure API is initialized
-        if (!isInitialized) {
-            await initGoogleAPI();
-        }
-
-        const response = await performWithRetry(() => 
-            window.gapi.client.sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: SALES_SHEET_RANGE
-            })
-        );
-
-        const rows = response.result.values || [];
-        const salesData = rows.map(row => ({
-            id: row[0] || '',
-            itemId: row[1] || '',
-            itemName: row[2] || '',
-            quantity: parseInt(row[3], 10) || 0,
-            unitPrice: parseFloat(row[4]) || 0,
-            totalPrice: parseFloat(row[5]) || 0,
-            timestamp: row[6] || new Date().toISOString()
-        }));
-        
-        // Cache the data for future use
-        cacheData('sales', salesData);
-        
-        return salesData;
-    } catch (error) {
-        console.error("Failed to fetch sales from Google Sheets:", error);
-        
-        // Try to use cached data even if it's expired
-        const cachedData = getCachedData('sales');
-        if (cachedData) {
-            console.log('Using expired cached sales data due to API failure');
-            return cachedData;
-        }
-        
-        // If no cached data, return empty array
-        console.warn('No cached sales data available, returning empty array');
-        return [];
-    }
-};
-
-/**
- * For static exports, we can't modify the Google Sheet directly
- * These functions are kept as stubs that trigger a notification
- * In a real app, you might collect these changes and sync them later
- */
-
-export const addItem = async (item) => {
-    console.warn('Write operations not supported in static export mode');
-    alert('Adding items is not available in the static version. This would normally be saved to Google Sheets.');
-    return { ...item, id: item.id || generateId() };
-};
-
-export const updateItem = async (item) => {
-    console.warn('Write operations not supported in static export mode');
-    alert('Updating items is not available in the static version. This would normally update Google Sheets.');
     return item;
-};
+}
 
-export const deleteItem = async (id) => {
-    console.warn('Write operations not supported in static export mode');
-    alert('Deleting items is not available in the static version. This would normally delete from Google Sheets.');
-    return { id };
-};
+/**
+ * Save an item to the inventory sheet
+ * @param {Object} item - The item to save
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<Object>} - The saved item
+ */
+export async function saveItemToSheet(item, accessToken) {
+    try {
+        const spreadsheetId = await getSpreadsheetId(accessToken);
+        await initializeInventorySheet(spreadsheetId, accessToken);
+        
+        const sheets = await getSheetsApi(accessToken);
 
-export const recordSale = async (item, quantity) => {
-    console.warn('Write operations not supported in static export mode');
-    alert('Recording sales is not available in the static version. This would normally be saved to Google Sheets.');
-    
-    const saleRecord = {
-        id: generateId(),
-        itemId: item.id,
-        itemName: item.name,
-        quantity: quantity,
-        unitPrice: item.price,
-        totalPrice: item.price * quantity,
-        timestamp: new Date().toISOString()
-    };
-    
-    return saleRecord;
-};
+        // Get all items to find existing item
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Inventory!A:Z', // Expand range to handle potential additional columns
+        });
+
+        const values = response.data.values || [];
+        const headers = values[0] || INVENTORY_HEADERS;
+        const headerMapping = createHeaderMapping(headers);
+        const rows = values.slice(1);
+        
+        // Find the ID column index
+        const idColumnIndex = headerMapping['id'];
+        if (idColumnIndex === undefined) {
+            throw new Error('ID column not found in inventory sheet');
+        }
+
+        // Find the row index for this item if it exists
+        let rowIndex = -1;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i][idColumnIndex] === item.id) {
+                rowIndex = i + 2; // +2 because row 1 is header and we're 0-indexed
+                break;
+            }
+        }
+
+        // Prepare values array from item object using the header mapping
+        const rowValues = itemToRowValues(item, headerMapping, headers);
+
+        if (rowIndex === -1) {
+            // Add new item
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `Inventory!A:${String.fromCharCode(65 + headers.length - 1)}`,
+                valueInputOption: 'RAW',
+                resource: {
+                    values: [rowValues],
+                },
+            });
+        } else {
+            // Update existing item
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `Inventory!A${rowIndex}:${String.fromCharCode(65 + headers.length - 1)}${rowIndex}`,
+                valueInputOption: 'RAW',
+                resource: {
+                    values: [rowValues],
+                },
+            });
+        }
+
+        return item;
+    } catch (error) {
+        console.error('Error saving item to sheet:', error);
+        throw new Error(`Failed to save item: ${error.message}`);
+    }
+}
+
+/**
+ * Delete an item from the inventory sheet
+ * @param {string} itemId - The ID of the item to delete
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<boolean>} - Success flag
+ */
+export async function deleteItemFromSheet(itemId, accessToken) {
+    try {
+        const spreadsheetId = await getSpreadsheetId(accessToken);
+        const sheets = await getSheetsApi(accessToken);
+
+        // Get all items to find row to delete
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Inventory!A:Z', // Expand range to handle potential additional columns
+        });
+
+        const values = response.data.values || [];
+        const headers = values[0] || [];
+        const headerMapping = createHeaderMapping(headers);
+        const rows = values.slice(1);
+        
+        // Find the ID column index
+        const idColumnIndex = headerMapping['id'];
+        if (idColumnIndex === undefined) {
+            throw new Error('ID column not found in inventory sheet');
+        }
+
+        // Find the row index for this item
+        let rowIndex = -1;
+        for (let i = 0; i < rows.length; i++) {
+            if (rows[i][idColumnIndex] === itemId) {
+                rowIndex = i + 2; // +2 because row 1 is header and we're 0-indexed
+                break;
+            }
+        }
+
+        if (rowIndex === -1) {
+            throw new Error(`Item with ID ${itemId} not found`);
+        }
+
+        // Clear the row (Google Sheets doesn't support true deletion, so we clear it)
+        await sheets.spreadsheets.values.clear({
+            spreadsheetId,
+            range: `Inventory!A${rowIndex}:${String.fromCharCode(65 + headers.length - 1)}${rowIndex}`,
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting item from sheet:', error);
+        throw new Error(`Failed to delete item: ${error.message}`);
+    }
+}
+
+/**
+ * Get all inventory items from the sheet
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<Array>} - Array of inventory items
+ */
+export async function getAllInventoryItems(accessToken) {
+    try {
+        const spreadsheetId = await getSpreadsheetId(accessToken);
+        await initializeInventorySheet(spreadsheetId, accessToken);
+        
+        const sheets = await getSheetsApi(accessToken);
+
+        // Get all items
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Inventory!A:Z', // Expand range to handle potential additional columns
+        });
+
+        const values = response.data.values || [];
+        
+        if (values.length <= 1) {
+            return []; // Only headers or empty sheet
+        }
+
+        const headers = values[0];
+        const headerMapping = createHeaderMapping(headers);
+        
+        const items = values.slice(1)
+            .filter(row => row.length > 0 && row[headerMapping['id']]) // Filter out empty rows
+            .map(row => rowToItem(row, headerMapping, headers));
+
+        return items;
+    } catch (error) {
+        console.error('Error getting inventory items:', error);
+        throw new Error(`Failed to get inventory items: ${error.message}`);
+    }
+}
+
+/**
+ * Get items with stock below their threshold
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<Array>} - Array of low stock items
+ */
+export async function getLowStockItems(accessToken) {
+    try {
+        const items = await getAllInventoryItems(accessToken);
+        return items.filter(item => 
+            item.quantity !== undefined && 
+            item.lowstockthreshold !== undefined && 
+            item.quantity <= item.lowstockthreshold
+        );
+    } catch (error) {
+        console.error('Error getting low stock items:', error);
+        throw new Error(`Failed to get low stock items: ${error.message}`);
+    }
+}
+
+/**
+ * Add a sale record to the sales sheet
+ * @param {Object} sale - The sale to record
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<string>} - The sale ID
+ */
+export async function addSaleToSheet(sale, accessToken) {
+    try {
+        const spreadsheetId = await getSpreadsheetId(accessToken);
+        await initializeSalesSheet(spreadsheetId, accessToken);
+        
+        const sheets = await getSheetsApi(accessToken);
+
+        // Get headers to create mapping
+        const headerResponse = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Sales!1:1',
+        });
+        
+        const headers = headerResponse.data.values?.[0] || SALES_HEADERS;
+        const headerMapping = createHeaderMapping(headers);
+
+        // Generate sale ID
+        const saleId = `SALE${Date.now()}`;
+        
+        // Create a complete sale object with ID
+        const completeSale = {
+            id: saleId,
+            itemid: sale.itemId,
+            itemname: sale.itemName,
+            quantity: sale.quantity,
+            price: sale.price,
+            date: new Date().toISOString(),
+        };
+        
+        // Convert to row values using header mapping
+        const rowValues = itemToRowValues(completeSale, headerMapping, headers);
+
+        // Add new sale
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `Sales!A:${String.fromCharCode(65 + headers.length - 1)}`,
+            valueInputOption: 'RAW',
+            resource: {
+                values: [rowValues],
+            },
+        });
+
+        return saleId;
+    } catch (error) {
+        console.error('Error adding sale to sheet:', error);
+        throw new Error(`Failed to add sale: ${error.message}`);
+    }
+}
+
+/**
+ * Get all sales from the sheet
+ * @param {string} accessToken - Google OAuth access token
+ * @returns {Promise<Array>} - Array of sales
+ */
+export async function getAllSales(accessToken) {
+    try {
+        const spreadsheetId = await getSpreadsheetId(accessToken);
+        await initializeSalesSheet(spreadsheetId, accessToken);
+        
+        const sheets = await getSheetsApi(accessToken);
+
+        // Get all sales
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Sales!A:Z', // Expand range to handle potential additional columns
+        });
+
+        const values = response.data.values || [];
+        
+        if (values.length <= 1) {
+            return []; // Only headers or empty sheet
+        }
+
+        const headers = values[0];
+        const headerMapping = createHeaderMapping(headers);
+        
+        const sales = values.slice(1)
+            .filter(row => row.length > 0 && row[headerMapping['id']]) // Filter out empty rows
+            .map(row => {
+                const sale = rowToItem(row, headerMapping, headers);
+                
+                // Ensure numeric conversions for quantity and price
+                if (typeof sale.quantity !== 'number') {
+                    sale.quantity = sale.quantity === '' ? 0 : Number(sale.quantity);
+                }
+                if (typeof sale.price !== 'number') {
+                    sale.price = sale.price === '' ? 0 : Number(sale.price);
+                }
+                
+                return sale;
+            });
+
+        return sales;
+    } catch (error) {
+        console.error('Error getting sales:', error);
+        throw new Error(`Failed to get sales: ${error.message}`);
+    }
+}

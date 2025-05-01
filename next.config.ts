@@ -8,11 +8,10 @@ const nextConfig = {
   },
   // Use proper asset prefix format for static exports
   assetPrefix: process.env.NODE_ENV === 'production' ? '/' : '',
-  // No server-side functionality for static export
+  // Experimental features configuration
   experimental: {
-    // Disable features that require server APIs
-    serverComponents: false,
-    serverActions: false,
+    // appDir is the correct option to enable/disable app directory features
+    appDir: false,
   },
   // Configure env variables that should be exposed to the client
   env: {

@@ -7,7 +7,7 @@ import {
     deleteItem,
     recordSale,
     addItem
-} from "../utils/dataService";
+} from "../utils/inventoryService";
 import { toast } from "react-hot-toast"; // Assuming you're using react-hot-toast for notifications
 
 export default function InventoryList() {

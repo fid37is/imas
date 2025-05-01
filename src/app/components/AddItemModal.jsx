@@ -40,10 +40,10 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                 name: itemToEdit.name || '',
                 category: itemToEdit.category || '',
                 price: itemToEdit.price || '',
-                costPrice: itemToEdit.costPrice || '',
+                costPrice: itemToEdit.costprice || '',
                 quantity: itemToEdit.quantity || '',
                 sku: itemToEdit.sku || '',
-                lowStockThreshold: itemToEdit.lowStockThreshold || '',
+                lowStockThreshold: itemToEdit.lowstockthreshold || '',
                 description: itemToEdit.description || ''
             });
             setAutoGenerateSKU(false);
@@ -61,6 +61,10 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
             });
             setAutoGenerateSKU(true);
         }
+        // Clear image file when modal opens/changes
+        setImageFile(null);
+        setSubmitError('');
+        setErrors({});
     }, [itemToEdit, isOpen]);
 
     // Auto-generate SKU when name or category changes if autoGenerateSKU is true
@@ -144,58 +148,85 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
     // Handle form submission
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitError('');
 
         if (validateForm()) {
             setIsSubmitting(true);
-            let imageUrl = '';
-
+            
             try {
-                if (imageFile) {
-                    const formData = new FormData();
-                    formData.append('file', imageFile);
-
-                    const uploadRes = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData,
-                    });
-
-                    if (uploadRes.ok) {
-                        const data = await uploadRes.json();
-                        imageUrl = data.imageUrl;
-                    } else {
-                        throw new Error('Image upload failed');
-                    }
+                // Create form data for API request
+                const apiFormData = new FormData();
+                
+                // Add all form fields to FormData
+                Object.entries(formData).forEach(([key, value]) => {
+                    apiFormData.append(key, value);
+                });
+                
+                // Add ID if editing
+                if (itemToEdit) {
+                    apiFormData.append('id', itemToEdit.id);
                 }
-
-                const processedData = {
-                    ...formData,
-                    imageUrl,
-                    price: Number(formData.price),
-                    costPrice: Number(formData.costPrice),
-                    quantity: Number(formData.quantity),
-                    lowStockThreshold: Number(formData.lowStockThreshold),
-                    ...(itemToEdit && { id: itemToEdit.id }),
-                };
-
-                await onSave(processedData);
-                setIsSubmitting(false);
+                
+                // Add image if there is one
+                if (imageFile) {
+                    apiFormData.append('image', imageFile);
+                }
+                
+                // Get auth token - this assumes you have a function to get the token
+                // You might need to adjust this based on your auth implementation
+                const accessToken = localStorage.getItem('accessToken');
+                
+                // Determine URL and method based on whether adding or editing
+                const url = itemToEdit 
+                    ? `/api/items/${itemToEdit.id}` 
+                    : '/api/items';
+                    
+                const method = itemToEdit ? 'PUT' : 'POST';
+                
+                // Make API request
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: apiFormData,
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to save item');
+                }
+                
+                const savedItem = await response.json();
+                
+                // Call onSave with the saved item
+                onSave(savedItem);
+                onClose();
             } catch (error) {
                 console.error('Submit error:', error);
+                setSubmitError(error.message || 'Failed to save item');
+            } finally {
                 setIsSubmitting(false);
             }
         }
     };
-
 
     // Prevent clicks inside the modal from closing it
     const handleModalClick = (e) => {
         e.stopPropagation();
     };
 
+    // Handle image file selection
+    const handleImageChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            setImageFile(e.target.files[0]);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={handleModalClick}>
                 <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
                     <h3 className="text-lg font-medium text-primary-600">
@@ -212,7 +243,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                     </button>
                 </div>
                 {submitError && (
-                    <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded">
+                    <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded mx-4 mt-4">
                         {submitError}
                     </div>
                 )}
@@ -329,63 +360,85 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         </div>
 
                         <div>
-                            <div className="flex justify-between items-center">
-                                <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
-                                    SKU *
-                                </label>
+                            <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
+                                SKU *
+                            </label>
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="text"
+                                    id="sku"
+                                    name="sku"
+                                    value={formData.sku}
+                                    onChange={handleChange}
+                                    disabled={autoGenerateSKU}
+                                    className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                        errors.sku ? 'border-red-500' : 'border-gray-300'
+                                    } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
+                                />
                                 <div className="flex items-center">
                                     <input
                                         type="checkbox"
-                                        id="autoSKU"
+                                        id="autoGenerateSKU"
                                         checked={autoGenerateSKU}
                                         onChange={handleSKUToggle}
-                                        className="mr-2 h-4 w-4 text-primary-600 focus:ring-accent-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-accent-600 focus:ring-accent-500 border-gray-300 rounded"
                                     />
-                                    <label htmlFor="autoSKU" className="text-xs text-gray-500">
+                                    <label htmlFor="autoGenerateSKU" className="ml-2 text-sm text-gray-700">
                                         Auto-generate
                                     </label>
                                 </div>
                             </div>
-                            <input
-                                type="text"
-                                id="sku"
-                                name="sku"
-                                value={formData.sku}
-                                onChange={handleChange}
-                                disabled={autoGenerateSKU}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.sku ? 'border-red-500' : 'border-gray-300'
-                                    } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
-                            />
                             {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
                         </div>
-                    </div>
-                    <div>
-                        <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
-                            Item Image
-                        </label>
-                        <input
-                            type="file"
-                            id="image"
-                            accept="image/*"
-                            onChange={(e) => setImageFile(e.target.files[0])}
-                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 border-gray-300"
-                        />
+
+                        <div>
+                            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                                Description
+                            </label>
+                            <textarea
+                                id="description"
+                                name="description"
+                                value={formData.description}
+                                onChange={handleChange}
+                                rows="3"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            ></textarea>
+                        </div>
+
+                        <div>
+                            <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
+                                Product Image
+                            </label>
+                            <input
+                                type="file"
+                                id="image"
+                                name="image"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            />
+                            {imageFile && (
+                                <p className="mt-1 text-sm text-green-600">
+                                    Selected: {imageFile.name}
+                                </p>
+                            )}
+                        </div>
                     </div>
 
-                    <div className="mt-6 flex justify-end space-x-3">
+                    <div className="mt-6 flex items-center justify-end space-x-3">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-accent-500"
+                            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="px-4 py-2 bg-primary-700 hover:bg-primary-500 text-white font-medium rounded transition-colors focus:outline-none focus:ring-2 focus:ring-accent-500 disabled:opacity-50"
+                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isSubmitting ? 'Saving...' : itemToEdit ? 'Update' : '+ Add'}
+                            {isSubmitting ? 'Saving...' : (itemToEdit ? 'Update Item' : 'Add Item')}
                         </button>
                     </div>
                 </form>

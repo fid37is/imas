@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import AddItemModal from './AddItemModal';
 import InventoryList from './InventoryList';
-import { addItem, updateItem, deleteItem } from '../utils/dataService';
+import { addItem, updateItem, deleteItem } from '../utils/inventoryService';
 
 // Custom Alert Component
 const CustomAlert = ({ message, type, isOpen, onClose }) => {
