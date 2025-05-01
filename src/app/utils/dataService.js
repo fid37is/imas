@@ -1,173 +1,156 @@
-// src/utils/dataService.js
+/**
+ * Data service for interacting with inventory and sales data
+ * This is a wrapper around the googleSheetsService to maintain compatibility with the existing components
+ */
+
+import {
+    initGoogleAPI,
+    getInventory as fetchInventoryFromSheets,
+    addItem as addItemToSheets,
+    updateItem as updateItemInSheets,
+    deleteItem as deleteItemFromSheets,
+    recordSale as recordSaleInSheets,
+    getSales as fetchSalesFromSheets
+} from './googleSheetsService';
+
+// Initialize Google API on module load
+let initialized = false;
+const initialize = async () => {
+    if (!initialized) {
+        try {
+            await initGoogleAPI();
+            initialized = true;
+        } catch (error) {
+            console.error("Failed to initialize Google API:", error);
+            // Don't set initialized to true if it failed
+        }
+    }
+};
+
+// Try to initialize when the module loads
+initialize();
 
 /**
  * Fetch all inventory items
- * @returns {Array} Array of inventory items
+ * @returns {Promise<Array>} Array of inventory items
  */
 export const getInventory = async () => {
     try {
-        const response = await fetch('/api/items');
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch inventory');
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        return await response.json();
+        return await fetchInventoryFromSheets();
     } catch (error) {
-        console.error('Error fetching inventory:', error);
+        console.error("Failed to fetch inventory:", error);
         throw error;
     }
 };
 
 /**
- * Add a new item to inventory
+ * Add a new inventory item
  * @param {Object} item - The item to add
- * @returns {Object} The added item with ID
+ * @returns {Promise<Object>} The added item with ID
  */
 export const addItem = async (item) => {
     try {
-        const response = await fetch('/api/items', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(item),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to add item');
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        return await response.json();
+        return await addItemToSheets(item);
     } catch (error) {
-        console.error('Error adding item:', error);
+        console.error("Failed to add item:", error);
         throw error;
     }
 };
 
 /**
- * Update an existing item
- * @param {Object} item - The item to update (must include id)
- * @returns {Object} The updated item
+ * Update an existing inventory item
+ * @param {Object} item - The item with updated fields
+ * @returns {Promise<Object>} Response data
  */
 export const updateItem = async (item) => {
     try {
-        if (!item.id) {
-            throw new Error('Item ID is required for update');
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        const response = await fetch(`/api/items/${item.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(item),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to update item');
-        }
-
-        return await response.json();
+        return await updateItemInSheets(item);
     } catch (error) {
-        console.error('Error updating item:', error);
+        console.error("Failed to update item:", error);
         throw error;
     }
 };
 
 /**
- * Delete an item by ID
- * @param {String} id - The ID of the item to delete
- * @returns {Object} Status response
+ * Delete an inventory item
+ * @param {string} id - The ID of the item to delete
+ * @returns {Promise<Object>} Response data
  */
 export const deleteItem = async (id) => {
     try {
-        const response = await fetch(`/api/items/${id}`, {
-            method: 'DELETE',
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to delete item');
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        return await response.json();
+        return await deleteItemFromSheets(id);
     } catch (error) {
-        console.error('Error deleting item:', error);
+        console.error("Failed to delete item:", error);
         throw error;
     }
 };
 
 /**
- * Record a sale for an item
- * @param {Object} item - The item being sold
- * @param {Number} quantity - Quantity sold
- * @returns {Object} Updated item with new quantity
+ * Upload image for an inventory item
+ * @param {File} file - The image file to upload
+ * @param {string} itemName - Name of the item for naming the file
+ * @returns {Promise<string>} URL of the uploaded image
+ */
+export const uploadImage = async () => {
+    try {
+        // For Google Drive integration, this would need to use the Google Drive API
+        // For now, we'll return a placeholder URL or handle file uploads differently
+        console.warn("File upload not yet implemented with Google Drive");
+        return "https://via.placeholder.com/150";
+    } catch (error) {
+        console.error("Failed to upload image:", error);
+        throw error;
+    }
+};
+
+/**
+ * Record a sale transaction
+ * @param {Object} item - The sold item
+ * @param {number} quantity - Quantity sold
+ * @returns {Promise<Object>} The recorded sale record
  */
 export const recordSale = async (item, quantity) => {
     try {
-        // Validate inputs
-        if (!item.id || !quantity || quantity <= 0) {
-            throw new Error('Invalid sale parameters');
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        if (quantity > item.quantity) {
-            throw new Error('Not enough inventory to complete sale');
-        }
-
-        const response = await fetch('/api/items/sell', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ itemId: item.id, quantity }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to record sale');
-        }
-
-        return await response.json();
+        return await recordSaleInSheets(item, quantity);
     } catch (error) {
-        console.error('Error recording sale:', error);
+        console.error("Failed to record sale:", error);
         throw error;
     }
 };
 
 /**
- * Upload an image for an item
- * @param {File} file - The image file to upload
- * @param {String} itemName - Optional item name for the file
- * @returns {String} URL of the uploaded image
+ * Get all sales records
+ * @returns {Promise<Array>} Array of sales records
  */
-export const uploadItemImage = async (file, itemName = '') => {
+export const getSales = async () => {
     try {
-        // Create form data for the file upload
-        const formData = new FormData();
-        formData.append('file', file);
-
-        if (itemName) {
-            formData.append('itemName', itemName);
+        // Ensure API is initialized
+        if (!initialized) {
+            await initialize();
         }
-
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to upload image');
-        }
-
-        const result = await response.json();
-        return result.imageUrl;
+        return await fetchSalesFromSheets();
     } catch (error) {
-        console.error('Error uploading image:', error);
+        console.error("Failed to fetch sales:", error);
         throw error;
     }
 };

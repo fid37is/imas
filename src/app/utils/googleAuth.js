@@ -7,8 +7,23 @@ import { google } from 'googleapis';
  */
 export const getGoogleAuth = () => {
     try {
-        // Parse service account key from environment variable
-        const serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '{}');
+        // For server-side authentication using a service account key
+        // Make sure GOOGLE_SERVICE_ACCOUNT_KEY is properly set in your environment
+        // It should be the entire JSON key file content, stringified
+        let serviceAccountKey;
+        
+        try {
+            // Attempt to parse the service account key from environment variable
+            serviceAccountKey = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '{}');
+            
+            // Verify key has required properties
+            if (!serviceAccountKey.client_email || !serviceAccountKey.private_key) {
+                throw new Error('Invalid service account key format');
+            }
+        } catch (parseError) {
+            console.error('Error parsing Google service account key:', parseError);
+            throw new Error('Invalid service account key format. Please check your GOOGLE_SERVICE_ACCOUNT_KEY environment variable.');
+        }
 
         // Create JWT client using service account credentials
         const auth = new google.auth.JWT(
@@ -24,7 +39,7 @@ export const getGoogleAuth = () => {
         return auth;
     } catch (error) {
         console.error('Error initializing Google Auth:', error);
-        throw new Error('Failed to initialize Google authentication');
+        throw new Error(`Failed to initialize Google authentication: ${error.message}`);
     }
 };
 
@@ -44,4 +59,20 @@ export const getSheetsClient = async () => {
 export const getDriveClient = async () => {
     const auth = getGoogleAuth();
     return google.drive({ version: 'v3', auth });
+};
+
+/**
+ * Helper function to test if Google auth is working
+ * @returns {Promise<boolean>} Whether authentication was successful
+ */
+export const testGoogleAuth = async () => {
+    try {
+        const auth = getGoogleAuth();
+        // Test authentication by getting a token
+        await auth.authorize();
+        return true;
+    } catch (error) {
+        console.error('Google Auth test failed:', error);
+        return false;
+    }
 };

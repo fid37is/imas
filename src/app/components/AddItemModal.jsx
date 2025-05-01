@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { generateSKU } from '../utils/skuGenerator';
 
 export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = null }) {
+    const [imageFile, setImageFile] = useState(null);
+    const [submitError, setSubmitError] = useState('');
     const [formData, setFormData] = useState({
         name: '',
         category: '',
@@ -79,7 +81,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
             ...prev,
             [name]: value
         }));
-        
+
         // Clear error for this field
         if (errors[name]) {
             setErrors(prev => ({
@@ -92,7 +94,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
     // Handle SKU auto-generation toggle
     const handleSKUToggle = () => {
         setAutoGenerateSKU(!autoGenerateSKU);
-        
+
         // If turning on auto-generation, update SKU immediately
         if (!autoGenerateSKU && formData.name && formData.category) {
             const newSKU = generateSKU(formData.name, formData.category);
@@ -106,60 +108,84 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
     // Validate form
     const validateForm = () => {
         const newErrors = {};
-        
+
         if (!formData.name.trim()) {
             newErrors.name = 'Name is required';
         }
-        
+
         if (!formData.category.trim()) {
             newErrors.category = 'Category is required';
         }
-        
+
         if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
             newErrors.price = 'Valid selling price is required';
         }
-        
+
         if (!formData.costPrice || isNaN(Number(formData.costPrice)) || Number(formData.costPrice) < 0) {
             newErrors.costPrice = 'Valid cost price is required';
         }
-        
+
         if (!formData.quantity || isNaN(Number(formData.quantity)) || Number(formData.quantity) < 0) {
             newErrors.quantity = 'Valid quantity is required';
         }
-        
+
         if (!formData.sku.trim()) {
             newErrors.sku = 'SKU is required';
         }
-        
+
         if (!formData.lowStockThreshold || isNaN(Number(formData.lowStockThreshold)) || Number(formData.lowStockThreshold) < 0) {
             newErrors.lowStockThreshold = 'Valid low stock threshold is required';
         }
-        
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
     // Handle form submission
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (validateForm()) {
             setIsSubmitting(true);
-            
-            // Convert numeric fields to numbers
-            const processedData = {
-                ...formData,
-                price: Number(formData.price),
-                costPrice: Number(formData.costPrice),
-                quantity: Number(formData.quantity),
-                lowStockThreshold: Number(formData.lowStockThreshold),
-                ...(itemToEdit && { id: itemToEdit.id }) // Keep the ID if editing
-            };
-            
-            onSave(processedData);
-            setIsSubmitting(false);
+            let imageUrl = '';
+
+            try {
+                if (imageFile) {
+                    const formData = new FormData();
+                    formData.append('file', imageFile);
+
+                    const uploadRes = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (uploadRes.ok) {
+                        const data = await uploadRes.json();
+                        imageUrl = data.imageUrl;
+                    } else {
+                        throw new Error('Image upload failed');
+                    }
+                }
+
+                const processedData = {
+                    ...formData,
+                    imageUrl,
+                    price: Number(formData.price),
+                    costPrice: Number(formData.costPrice),
+                    quantity: Number(formData.quantity),
+                    lowStockThreshold: Number(formData.lowStockThreshold),
+                    ...(itemToEdit && { id: itemToEdit.id }),
+                };
+
+                await onSave(processedData);
+                setIsSubmitting(false);
+            } catch (error) {
+                console.error('Submit error:', error);
+                setIsSubmitting(false);
+            }
         }
     };
+
 
     // Prevent clicks inside the modal from closing it
     const handleModalClick = (e) => {
@@ -175,7 +201,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                     <h3 className="text-lg font-medium text-primary-600">
                         {itemToEdit ? 'Edit Item' : 'Add New Item'}
                     </h3>
-                    <button 
+                    <button
                         onClick={onClose}
                         className="text-gray-400 hover:text-gray-500"
                         aria-label="Close"
@@ -185,7 +211,11 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         </svg>
                     </button>
                 </div>
-                
+                {submitError && (
+                    <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded">
+                        {submitError}
+                    </div>
+                )}
                 <form onSubmit={handleSubmit} className="p-4">
                     <div className="grid grid-cols-1 gap-4">
                         <div>
@@ -198,13 +228,12 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="name"
                                 value={formData.name}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                    errors.name ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                             />
                             {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
                         </div>
-                        
+
                         <div>
                             <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">
                                 Category *
@@ -214,9 +243,8 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                    errors.category ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                             >
                                 <option value="">Select a category</option>
                                 {categories.map(category => (
@@ -225,7 +253,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                             </select>
                             {errors.category && <p className="mt-1 text-xs text-red-500">{errors.category}</p>}
                         </div>
-                        
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
@@ -239,13 +267,12 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                        errors.price ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                 />
                                 {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
                             </div>
-                            
+
                             <div>
                                 <label htmlFor="costPrice" className="block text-sm font-medium text-gray-700 mb-1">
                                     Cost Price ($) *
@@ -258,14 +285,13 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                        errors.costPrice ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.costPrice ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                 />
                                 {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
                             </div>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
@@ -278,13 +304,12 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.quantity}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                        errors.quantity ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                 />
                                 {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
                             </div>
-                            
+
                             <div>
                                 <label htmlFor="lowStockThreshold" className="block text-sm font-medium text-gray-700 mb-1">
                                     Low Stock Threshold *
@@ -296,14 +321,13 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.lowStockThreshold}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                        errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
-                                    }`}
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
+                                        }`}
                                 />
                                 {errors.lowStockThreshold && <p className="mt-1 text-xs text-red-500">{errors.lowStockThreshold}</p>}
                             </div>
                         </div>
-                        
+
                         <div>
                             <div className="flex justify-between items-center">
                                 <label htmlFor="sku" className="block text-sm font-medium text-gray-700 mb-1">
@@ -329,14 +353,25 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 value={formData.sku}
                                 onChange={handleChange}
                                 disabled={autoGenerateSKU}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
-                                    errors.sku ? 'border-red-500' : 'border-gray-300'
-                                } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.sku ? 'border-red-500' : 'border-gray-300'
+                                    } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
                             />
                             {errors.sku && <p className="mt-1 text-xs text-red-500">{errors.sku}</p>}
                         </div>
                     </div>
-                    
+                    <div>
+                        <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
+                            Item Image
+                        </label>
+                        <input
+                            type="file"
+                            id="image"
+                            accept="image/*"
+                            onChange={(e) => setImageFile(e.target.files[0])}
+                            className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 border-gray-300"
+                        />
+                    </div>
+
                     <div className="mt-6 flex justify-end space-x-3">
                         <button
                             type="button"

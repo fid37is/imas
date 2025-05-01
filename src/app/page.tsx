@@ -2,7 +2,11 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase/config";
-
+import { 
+  getInventory, 
+  getSales, 
+  recordSale 
+} from "./utils/dataService";
 
 import Login from "./components/Login";
 import Navbar from "./components/Navbar";
@@ -40,6 +44,17 @@ export default function Home() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [salesData, setSalesData] = useState<SaleRecord[]>([]);
   const [activeView, setActiveView] = useState<"inventory" | "dashboard">("inventory");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Clear error after 5 seconds
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
 
   // Auth state listener
   useEffect(() => {
@@ -66,7 +81,7 @@ export default function Home() {
           setSalesData(sales as SaleRecord[]);
         } catch (error) {
           console.error("Error loading data:", error);
-          alert("Failed to load data. Please refresh the page.");
+          setErrorMessage("Failed to load data. Please refresh the page.");
         } finally {
           setLoading(false);
         }
@@ -99,7 +114,7 @@ export default function Home() {
       return true;
     } catch (error) {
       console.error("Error selling item:", error);
-      alert("Failed to process sale. Please try again.");
+      setErrorMessage("Failed to process sale. Please try again.");
       return false;
     } finally {
       setLoading(false);
@@ -107,7 +122,7 @@ export default function Home() {
   };
 
   // If still checking auth state
-  if (loading) {
+  if (loading && !user) {
     return <Loading />;
   }
 
@@ -123,6 +138,18 @@ export default function Home() {
         setActiveView={setActiveView} 
         user={user} 
       />
+      
+      {errorMessage && (
+        <div className="fixed top-16 left-0 right-0 mx-auto w-full max-w-md p-4 bg-red-100 border border-red-400 text-red-700 rounded shadow-md z-50 flex justify-between items-center">
+          <span>{errorMessage}</span>
+          <button 
+            onClick={() => setErrorMessage(null)} 
+            className="text-red-700 hover:text-red-900"
+          >
+            ×
+          </button>
+        </div>
+      )}
       
       <div className="container mx-auto py-6 px-4">
         {activeView === "inventory" ? (
