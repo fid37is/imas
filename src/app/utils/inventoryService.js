@@ -1,12 +1,19 @@
 // src/app/utils/inventoryService.js
 import { googleSheetsClient } from './googleSheetsClient';
-import { fetchSheetData, updateSheetData } from './googleSheetsClient';
-
+import { fetchSheetData, updateSheetData, isAuthenticated } from './googleSheetsClient';
 
 // Configuration
 const INVENTORY_SPREADSHEET_ID = process.env.NEXT_PUBLIC_INVENTORY_SPREADSHEET_ID;
-const INVENTORY_RANGE = 'Inventory!A2:I1000'; // Adjust based on your actual sheet structure
+const INVENTORY_RANGE = 'Inventory!A2:J1000'; // Adjust based on your actual sheet structure
 const SALES_RANGE = 'Sales!A2:H1000'; // Sales sheet range
+
+/**
+ * Check if the user is authenticated before proceeding with any API calls
+ * @returns {boolean} Authentication status
+ */
+export function checkAuthentication() {
+    return isAuthenticated();
+}
 
 /**
  * Get inventory data
@@ -14,23 +21,25 @@ const SALES_RANGE = 'Sales!A2:H1000'; // Sales sheet range
  */
 export async function getInventory() {
     try {
-        // const data = await googleSheetsClient.getData(INVENTORY_SPREADSHEET_ID, INVENTORY_RANGE);
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to fetch inventory');
+        }
 
         const data = await fetchSheetData(INVENTORY_SPREADSHEET_ID, INVENTORY_RANGE);
 
-
         // Transform the raw data into a structured format
         return data.map(row => ({
-            id: row[0],
-            name: row[1],
-            category: row[2],
-            sku: row[0], // Using ID as SKU
-            quantity: parseInt(row[3], 10) || 0,
-            price: parseFloat(row[4]) || 0,
-            costPrice: parseFloat(row[5]) || 0,
-            lowStockThreshold: parseInt(row[6], 10) || 5,
-            imageUrl: row[7] || "",
-            lastUpdated: row[8] || new Date().toISOString()
+            id: row[0],            // Assuming 'id' is in column A
+            name: row[1],          // Assuming 'name' is in column B
+            category: row[2],      // Assuming 'category' is in column C
+            sku: row[3],           // SKU is now correctly mapped to column D
+            quantity: parseInt(row[4], 10) || 0,  // Assuming quantity is in column E
+            price: parseFloat(row[5]) || 0,     // Assuming price is in column F
+            costPrice: parseFloat(row[6]) || 0,  // Assuming costPrice is in column G
+            lowStockThreshold: parseInt(row[7], 10) || 5, // Assuming lowStockThreshold is in column H
+            imageUrl: row[8] || "", // Assuming imageUrl is in column I
+            lastUpdated: row[9] || new Date().toISOString()  // Assuming lastUpdated is in column J
         })).filter(item => item.id); // Filter out empty rows
     } catch (error) {
         console.error('Error getting inventory items:', error);
@@ -45,6 +54,11 @@ export async function getInventory() {
  */
 export async function updateItem(item) {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to update inventory');
+        }
+
         // Find the row with matching itemId
         const allItems = await getInventory();
         const itemIndex = allItems.findIndex(i => i.id === item.id);
@@ -57,7 +71,7 @@ export async function updateItem(item) {
         const rowNumber = itemIndex + 2;
 
         // Update the entire row
-        const range = `Inventory!A${rowNumber}:I${rowNumber}`;
+        const range = `Inventory!A${rowNumber}:J${rowNumber}`;
         const timestamp = new Date().toISOString();
 
         await googleSheetsClient.updateData(
@@ -67,6 +81,7 @@ export async function updateItem(item) {
                 item.id,
                 item.name,
                 item.category,
+                item.sku,                // Ensure sku is updated as well
                 item.quantity.toString(),
                 item.price.toString(),
                 item.costPrice.toString(),
@@ -93,6 +108,11 @@ export async function updateItem(item) {
  */
 export async function deleteItem(itemId) {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to delete inventory');
+        }
+
         // Find the row with matching itemId
         const allItems = await getInventory();
         const itemIndex = allItems.findIndex(item => item.id === itemId);
@@ -105,11 +125,11 @@ export async function deleteItem(itemId) {
         const rowNumber = itemIndex + 2;
 
         // Clear the row (replace with empty values)
-        const range = `Inventory!A${rowNumber}:I${rowNumber}`;
+        const range = `Inventory!A${rowNumber}:J${rowNumber}`;
         await googleSheetsClient.updateData(
             INVENTORY_SPREADSHEET_ID,
             range,
-            [["", "", "", "", "", "", "", "", ""]]
+            [["", "", "", "", "", "", "", "", "", ""]]
         );
 
         return true;
@@ -126,6 +146,11 @@ export async function deleteItem(itemId) {
  */
 export async function addItem(item) {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to add inventory');
+        }
+
         // Generate a unique ID for the new item
         const itemId = `ITEM-${Date.now()}`;
         const timestamp = new Date().toISOString();
@@ -141,7 +166,7 @@ export async function addItem(item) {
         };
 
         // Append the new item to the Inventory sheet
-        const range = `Inventory!A${nextRowNumber}:I${nextRowNumber}`;
+        const range = `Inventory!A${nextRowNumber}:J${nextRowNumber}`;
         await updateSheetData(
             INVENTORY_SPREADSHEET_ID,
             range,
@@ -149,6 +174,7 @@ export async function addItem(item) {
                 newItem.id,
                 newItem.name,
                 newItem.category,
+                newItem.sku,                 // Ensure sku is added
                 (newItem.quantity || 0).toString(),
                 (newItem.price || 0).toString(),
                 (newItem.costPrice || 0).toString(),
@@ -173,6 +199,11 @@ export async function addItem(item) {
  */
 export async function recordSale(item, quantity) {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to record sales');
+        }
+
         // Get the item to verify it exists and has enough stock
         const items = await getInventory();
         const currentItem = items.find(i => i.id === item.id);
@@ -244,6 +275,11 @@ export async function recordSale(item, quantity) {
  */
 export async function getSales() {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to fetch sales');
+        }
+
         const data = await googleSheetsClient.getData(INVENTORY_SPREADSHEET_ID, SALES_RANGE);
 
         // Transform the raw data into a structured format
@@ -269,6 +305,11 @@ export async function getSales() {
  */
 export async function getLowStockItems() {
     try {
+        // Check authentication first
+        if (!checkAuthentication()) {
+            throw new Error('Authentication required to get low stock items');
+        }
+
         const inventory = await getInventory();
         return inventory.filter(item => item.quantity <= (item.lowStockThreshold || 5));
     } catch (error) {

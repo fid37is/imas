@@ -14,7 +14,21 @@ async function getAuthToken() {
     if (!currentUser) {
         throw new Error('Not authenticated');
     }
-    return await currentUser.getIdToken();
+    
+    try {
+        return await currentUser.getIdToken();
+    } catch (error) {
+        console.error('Error getting auth token:', error);
+        throw new Error('Authentication failed: ' + error.message);
+    }
+}
+
+/**
+ * Checks if user is authenticated
+ * @returns {boolean} - Authentication status
+ */
+export function isAuthenticated() {
+    return !!auth.currentUser;
 }
 
 /**
@@ -25,6 +39,10 @@ async function getAuthToken() {
  */
 export async function fetchSheetData(spreadsheetId, range) {
     try {
+        if (!isAuthenticated()) {
+            throw new Error('User is not authenticated');
+        }
+        
         const token = await getAuthToken();
 
         const response = await fetch(`/api/googleSheets?spreadsheetId=${spreadsheetId}&range=${encodeURIComponent(range)}`, {
@@ -55,6 +73,10 @@ export async function fetchSheetData(spreadsheetId, range) {
  */
 export async function updateSheetData(spreadsheetId, range, values, insertDataOption = null) {
     try {
+        if (!isAuthenticated()) {
+            throw new Error('User is not authenticated');
+        }
+        
         const token = await getAuthToken();
 
         const requestBody = {
@@ -95,6 +117,10 @@ export async function updateSheetData(spreadsheetId, range, values, insertDataOp
  */
 export async function clearSheetData(spreadsheetId, range) {
     try {
+        if (!isAuthenticated()) {
+            throw new Error('User is not authenticated');
+        }
+        
         const token = await getAuthToken();
 
         const response = await fetch(`/api/googleSheets?spreadsheetId=${spreadsheetId}&range=${encodeURIComponent(range)}`, {
@@ -122,6 +148,10 @@ export async function clearSheetData(spreadsheetId, range) {
  */
 export async function getSpreadsheetId() {
     try {
+        if (!isAuthenticated()) {
+            throw new Error('User is not authenticated');
+        }
+        
         const token = await getAuthToken();
 
         const response = await fetch('/api/spreadsheetId', {
@@ -148,5 +178,6 @@ export const googleSheetsClient = {
     getData: fetchSheetData,
     updateData: updateSheetData,
     clearData: clearSheetData,
-    getSpreadsheetId: getSpreadsheetId
+    getSpreadsheetId: getSpreadsheetId,
+    isAuthenticated
 };
