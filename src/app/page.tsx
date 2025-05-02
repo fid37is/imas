@@ -19,13 +19,15 @@ interface User {
 }
 
 interface InventoryItem {
-  lowStockThreshold: number;
   id: string;
   name: string;
   category: string;
   quantity: number;
   price: number;
-  lastUpdated: string;
+  sku?: string;
+  costPrice?: number;
+  lastUpdated?: string;
+  lowStockThreshold: number;
   imageUrl?: string;
   imageId?: string;
 }
@@ -78,23 +80,49 @@ export default function Home() {
         setLoading(true);
         try {
           // Load inventory data
-          const inventoryData = await inventoryService.getInventory();
-          setInventory(inventoryData as InventoryItem[]);
+          const rawInventoryData = await inventoryService.getInventory();
+          
+          // Transform the data to match our InventoryItem interface
+          const formattedInventory: InventoryItem[] = rawInventoryData.map(item => ({
+            id: item.id,
+            name: item.name,
+            category: item.category || 'Uncategorized',
+            quantity: item.quantity,
+            price: item.price,
+            sku: item.sku,
+            costPrice: item.costPrice,
+            lowStockThreshold: item.lowStockThreshold,
+            imageUrl: item.imageUrl,
+            lastUpdated: new Date().toISOString() // Add missing lastUpdated field
+          }));
+          
+          setInventory(formattedInventory);
 
           // Find low stock items
-          const lowStock = inventoryData.filter(item => 
-            item.quantity <= (item.lowStockThreshold || 5)
+          const lowStock = formattedInventory.filter(item => 
+            item.quantity <= item.lowStockThreshold
           );
-          setLowStockItems(lowStock as InventoryItem[]);
+          setLowStockItems(lowStock);
           
           // Show low stock alert if there are items low in stock
           if (lowStock && lowStock.length > 0) {
             setShowLowStockAlert(true);
           }
 
-          // Load sales data
-          const sales = await inventoryService.getSales();
-          setSalesData(sales as SaleRecord[]);
+          // Load sales data - if getSales is implemented
+          try {
+            if (typeof inventoryService.getSales === 'function') {
+              const sales = await inventoryService.getSales();
+              setSalesData(sales as SaleRecord[]);
+            } else {
+              // If getSales doesn't exist, initialize with empty array
+              setSalesData([]);
+              console.warn('getSales function not available in inventoryService');
+            }
+          } catch (error) {
+            console.error("Error loading sales data:", error);
+            setSalesData([]);
+          }
         } catch (error) {
           console.error("Error loading data:", error);
           setErrorMessage("Failed to load data. Please refresh the page.");
@@ -121,30 +149,46 @@ export default function Home() {
         id: item.id,
         name: item.name,
         price: item.price,
-        quantity: quantity
+        quantity: quantity,
+        costPrice: item.costPrice || 0, // Add costPrice for profit calculation
+        sku: item.sku || ''
       };
       
       // Record the sale - this automatically updates inventory quantities
-      const saleRecord = await inventoryService.recordSale(saleData, quantity);
+      await inventoryService.recordSale(saleData, quantity);
       
       // Update local state
-      // Add sale to sales data
-      setSalesData(prevSales => [...prevSales, saleRecord as SaleRecord]);
+      // Add sale to sales data - this is a simplification and might need adjustment
+      const newSaleRecord: SaleRecord = {
+        id: Date.now().toString(), // Temporary ID for the local state
+        itemId: item.id,
+        itemName: item.name,
+        quantity: quantity,
+        unitPrice: item.price,
+        totalPrice: item.price * quantity,
+        timestamp: new Date().toISOString(),
+        userId: user.uid
+      };
+      setSalesData(prevSales => [...prevSales, newSaleRecord]);
       
       // Update inventory item in local state
       const updatedInventory = inventory.map(invItem => 
         invItem.id === item.id 
-          ? { ...invItem, quantity: Math.max(0, invItem.quantity - quantity) } 
+          ? { 
+              ...invItem, 
+              quantity: Math.max(0, invItem.quantity - quantity),
+              lastUpdated: new Date().toISOString()
+            } 
           : invItem
       );
       setInventory(updatedInventory);
       
       // Check if this sale caused the item to reach low stock levels
-      const updatedItem = updatedInventory.find(i => i.id === item.id);
-      if (updatedItem && updatedItem.quantity <= (updatedItem.lowStockThreshold || 5)) {
+      const updatedItemInState = updatedInventory.find(i => i.id === item.id);
+      if (updatedItemInState && updatedItemInState.quantity <= updatedItemInState.lowStockThreshold) {
         // Check if item is already in low stock list
         if (!lowStockItems.some(i => i.id === item.id)) {
-          setLowStockItems(prevLowStock => [...prevLowStock, updatedItem]);
+          setLowStockItems(prevLowStock => [...prevLowStock, updatedItemInState]);
           setShowLowStockAlert(true);
         }
       }

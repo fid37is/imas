@@ -8,9 +8,11 @@
     "node": "22"
   },
   "scripts": {
+    "dev": "NODE_OPTIONS='--openssl-legacy-provider' next dev",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
-    "start": "npm run shell",
+    "build": "next build",
+    "start": "NODE_OPTIONS='--openssl-legacy-provider' next start",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "local": "NODE_ENV=development node index.js"
