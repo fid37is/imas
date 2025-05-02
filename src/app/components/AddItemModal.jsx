@@ -169,7 +169,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                 
                 // Add image if there is one
                 if (imageFile) {
-                    apiFormData.append('image', imageFile);
+                    apiFormData.append('file', imageFile);
                 }
                 
                 // Get auth token - this assumes you have a function to get the token

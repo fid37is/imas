@@ -11,6 +11,7 @@ import {
 import { toast } from "react-hot-toast"; // Assuming you're using react-hot-toast for notifications
 
 export default function InventoryList() {
+    
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedItems, setSelectedItems] = useState([]);

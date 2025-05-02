@@ -2,11 +2,7 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase/config";
-import { 
-  getItems, 
-  getLowStock,
-  recordSale 
-} from "../app/utils/inventoryService";
+import * as inventoryService from "../app/utils/inventoryService";
 
 import Login from "./components/Login";
 import Navbar from "./components/Navbar";
@@ -23,13 +19,15 @@ interface User {
 }
 
 interface InventoryItem {
+  lowStockThreshold: number;
   id: string;
   name: string;
+  category: string;
   quantity: number;
   price: number;
+  lastUpdated: string;
   imageUrl?: string;
   imageId?: string;
-  // Add other inventory item properties as needed
 }
 
 interface SaleRecord {
@@ -37,10 +35,10 @@ interface SaleRecord {
   itemId: string;
   itemName: string;
   quantity: number;
-  price: number;
-  totalPrice?: number;
-  timestamp?: Date;
-  // Add other sale record properties as needed
+  unitPrice: number;
+  totalPrice: number;
+  timestamp: string;
+  userId: string;
 }
 
 export default function Home() {
@@ -79,27 +77,24 @@ export default function Home() {
       if (user) {
         setLoading(true);
         try {
-          // Get access token from the user if needed for inventory service
-          const accessToken = await user.getIdToken?.() || "";
-          
-          // Load inventory data - using getItems instead of getInventory
-          const inventoryData = await getItems(accessToken);
+          // Load inventory data
+          const inventoryData = await inventoryService.getInventory();
           setInventory(inventoryData as InventoryItem[]);
 
-          // Check for low stock items
-          const lowStockData = await getLowStock(accessToken);
-          setLowStockItems(lowStockData as InventoryItem[]);
+          // Find low stock items
+          const lowStock = inventoryData.filter(item => 
+            item.quantity <= (item.lowStockThreshold || 5)
+          );
+          setLowStockItems(lowStock as InventoryItem[]);
           
           // Show low stock alert if there are items low in stock
-          if (lowStockData && lowStockData.length > 0) {
+          if (lowStock && lowStock.length > 0) {
             setShowLowStockAlert(true);
           }
 
-          // Note: The refactored service doesn't appear to have a direct getSales function
-          // You might need to implement this or modify this part based on your needs
-          // Placeholder for now - you'll need to add the proper implementation
-          // const sales = await getSales(accessToken);
-          // setSalesData(sales as SaleRecord[]);
+          // Load sales data
+          const sales = await inventoryService.getSales();
+          setSalesData(sales as SaleRecord[]);
         } catch (error) {
           console.error("Error loading data:", error);
           setErrorMessage("Failed to load data. Please refresh the page.");
@@ -117,22 +112,26 @@ export default function Home() {
     try {
       setLoading(true);
       
-      // Get access token if needed
-      const accessToken = await user?.getIdToken?.() || "";
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
       
-      // Create sale object based on what recordSale expects
+      // Create sale object
       const saleData = {
-        itemId: item.id,
-        itemName: item.name,
-        quantity: quantity,
-        price: item.price
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: quantity
       };
       
-      // Record the sale - this matches the new service function signature
-      const saleRecord = await recordSale(saleData, accessToken) as SaleRecord;
+      // Record the sale - this automatically updates inventory quantities
+      const saleRecord = await inventoryService.recordSale(saleData, quantity);
       
       // Update local state
-      // Update inventory
+      // Add sale to sales data
+      setSalesData(prevSales => [...prevSales, saleRecord as SaleRecord]);
+      
+      // Update inventory item in local state
       const updatedInventory = inventory.map(invItem => 
         invItem.id === item.id 
           ? { ...invItem, quantity: Math.max(0, invItem.quantity - quantity) } 
@@ -140,15 +139,12 @@ export default function Home() {
       );
       setInventory(updatedInventory);
       
-      // Add sale to sales data
-      setSalesData([...salesData, saleRecord]);
-      
       // Check if this sale caused the item to reach low stock levels
       const updatedItem = updatedInventory.find(i => i.id === item.id);
-      if (updatedItem && updatedItem.quantity <= 5) { // Assuming 5 is the threshold for low stock
+      if (updatedItem && updatedItem.quantity <= (updatedItem.lowStockThreshold || 5)) {
         // Check if item is already in low stock list
         if (!lowStockItems.some(i => i.id === item.id)) {
-          setLowStockItems([...lowStockItems, updatedItem]);
+          setLowStockItems(prevLowStock => [...prevLowStock, updatedItem]);
           setShowLowStockAlert(true);
         }
       }
@@ -156,7 +152,7 @@ export default function Home() {
       return true;
     } catch (error) {
       console.error("Error selling item:", error);
-      setErrorMessage("Failed to process sale. Please try again.");
+      setErrorMessage(`Failed to process sale: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     } finally {
       setLoading(false);
