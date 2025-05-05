@@ -40,10 +40,10 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                 name: itemToEdit.name || '',
                 category: itemToEdit.category || '',
                 price: itemToEdit.price || '',
-                costPrice: itemToEdit.costprice || '',
+                costPrice: itemToEdit.costPrice || '',
                 quantity: itemToEdit.quantity || '',
                 sku: itemToEdit.sku || '',
-                lowStockThreshold: itemToEdit.lowstockthreshold || '',
+                lowStockThreshold: itemToEdit.lowStockThreshold || '',
                 description: itemToEdit.description || ''
             });
             setAutoGenerateSKU(false);
@@ -154,53 +154,25 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
             setIsSubmitting(true);
             
             try {
-                // Create form data for API request
-                const apiFormData = new FormData();
+                // Convert form data to proper types
+                const itemData = {
+                    ...formData,
+                    price: parseFloat(formData.price),
+                    costPrice: parseFloat(formData.costPrice),
+                    quantity: parseInt(formData.quantity),
+                    lowStockThreshold: parseInt(formData.lowStockThreshold),
+                    image: imageFile
+                };
                 
-                // Add all form fields to FormData
-                Object.entries(formData).forEach(([key, value]) => {
-                    apiFormData.append(key, value);
-                });
-                
-                // Add ID if editing
+                // If editing, include the ID
                 if (itemToEdit) {
-                    apiFormData.append('id', itemToEdit.id);
+                    itemData.id = itemToEdit.id;
+                    itemData.imageUrl = itemToEdit.imageUrl;
+                    itemData.createdAt = itemToEdit.createdAt;
                 }
                 
-                // Add image if there is one
-                if (imageFile) {
-                    apiFormData.append('file', imageFile);
-                }
-                
-                // Get auth token - this assumes you have a function to get the token
-                // You might need to adjust this based on your auth implementation
-                const accessToken = localStorage.getItem('accessToken');
-                
-                // Determine URL and method based on whether adding or editing
-                const url = itemToEdit 
-                    ? `/api/items/${itemToEdit.id}` 
-                    : '/api/items';
-                    
-                const method = itemToEdit ? 'PUT' : 'POST';
-                
-                // Make API request
-                const response = await fetch(url, {
-                    method,
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`
-                    },
-                    body: apiFormData,
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to save item');
-                }
-                
-                const savedItem = await response.json();
-                
-                // Call onSave with the saved item
-                onSave(savedItem);
+                // Pass the data to onSave callback
+                await onSave(itemData);
                 onClose();
             } catch (error) {
                 console.error('Submit error:', error);
@@ -259,7 +231,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="name"
                                 value={formData.name}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
                                     }`}
                             />
                             {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
@@ -274,7 +246,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.category ? 'border-red-500' : 'border-gray-300'
                                     }`}
                             >
                                 <option value="">Select a category</option>
@@ -298,7 +270,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
@@ -316,7 +288,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.costPrice ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.costPrice ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
@@ -335,7 +307,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.quantity}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
@@ -352,7 +324,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.lowStockThreshold}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.lowStockThreshold && <p className="mt-1 text-xs text-red-500">{errors.lowStockThreshold}</p>}
@@ -371,7 +343,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.sku}
                                     onChange={handleChange}
                                     disabled={autoGenerateSKU}
-                                    className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 ${
+                                    className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                                         errors.sku ? 'border-red-500' : 'border-gray-300'
                                     } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
                                 />
@@ -381,7 +353,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                         id="autoGenerateSKU"
                                         checked={autoGenerateSKU}
                                         onChange={handleSKUToggle}
-                                        className="h-4 w-4 text-accent-600 focus:ring-accent-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                                     />
                                     <label htmlFor="autoGenerateSKU" className="ml-2 text-sm text-gray-700">
                                         Auto-generate
@@ -401,7 +373,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 value={formData.description}
                                 onChange={handleChange}
                                 rows="3"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             ></textarea>
                         </div>
 
@@ -415,12 +387,22 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="image"
                                 accept="image/*"
                                 onChange={handleImageChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             {imageFile && (
                                 <p className="mt-1 text-sm text-green-600">
                                     Selected: {imageFile.name}
                                 </p>
+                            )}
+                            {itemToEdit && itemToEdit.imageUrl && (
+                                <div className="mt-2">
+                                    <p className="text-sm text-gray-600">Current image:</p>
+                                    <img 
+                                        src={itemToEdit.imageUrl} 
+                                        alt={itemToEdit.name} 
+                                        className="h-20 w-20 object-cover mt-1"
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
@@ -429,14 +411,14 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500"
+                            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-accent-600 hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? 'Saving...' : (itemToEdit ? 'Update Item' : 'Add Item')}
                         </button>

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase/config";
+// Import the correct functions from inventoryService
 import * as inventoryService from "../app/utils/inventoryService";
 
 import Login from "./components/Login";
@@ -41,6 +42,16 @@ interface SaleRecord {
   totalPrice: number;
   timestamp: string;
   userId: string;
+}
+
+// Define SaleData interface to fix the TypeScript error
+interface SaleData {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  costPrice: number;
+  sku: string;
 }
 
 export default function Home() {
@@ -144,8 +155,8 @@ export default function Home() {
         throw new Error("User not authenticated");
       }
       
-      // Create sale object
-      const saleData = {
+      // Create sale object with proper typing
+      const saleData: SaleData = {
         id: item.id,
         name: item.name,
         price: item.price,
@@ -197,6 +208,112 @@ export default function Home() {
     } catch (error) {
       console.error("Error selling item:", error);
       setErrorMessage(`Failed to process sale: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add a new item to inventory
+  const handleAddItem = async (newItem: Omit<InventoryItem, "id" | "lastUpdated">) => {
+    try {
+      setLoading(true);
+      
+      // Create a complete inventory item
+      const completeItem: InventoryItem = {
+        ...newItem,
+        id: `item-${Date.now()}`, // Generate unique ID
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Add item using inventoryService - Map to correct function in inventoryService
+      await inventoryService.addInventoryItem(completeItem);
+      
+      // Update local state
+      setInventory(prevInventory => [...prevInventory, completeItem]);
+      
+      return true;
+    } catch (error) {
+      console.error("Error adding item:", error);
+      setErrorMessage(`Failed to add item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update an existing item
+  const handleUpdateItem = async (updatedItem: InventoryItem) => {
+    try {
+      setLoading(true);
+      
+      // Update with current timestamp
+      const itemWithTimestamp = {
+        ...updatedItem,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Update item using inventoryService - Map to correct function in inventoryService
+      // We need to pass the row index which we can derive from the id
+      const itemIndex = parseInt(updatedItem.id);
+      await inventoryService.updateInventoryItem(itemIndex, itemWithTimestamp);
+      
+      // Update local state
+      setInventory(prevInventory => 
+        prevInventory.map(item => 
+          item.id === updatedItem.id ? itemWithTimestamp : item
+        )
+      );
+      
+      // Check if this update affects low stock status
+      if (itemWithTimestamp.quantity <= itemWithTimestamp.lowStockThreshold) {
+        if (!lowStockItems.some(i => i.id === itemWithTimestamp.id)) {
+          setLowStockItems(prev => [...prev, itemWithTimestamp]);
+          setShowLowStockAlert(true);
+        }
+      } else {
+        // Remove from low stock if quantity now above threshold
+        setLowStockItems(prev => prev.filter(i => i.id !== itemWithTimestamp.id));
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error updating item:", error);
+      setErrorMessage(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete an item
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      setLoading(true);
+      
+      // Parse itemId to get row index
+      const itemIndex = parseInt(itemId);
+      const itemToDelete = inventory.find(item => item.id === itemId);
+      
+      if (!itemToDelete) {
+        throw new Error("Item not found");
+      }
+      
+      // Delete item using inventoryService - Map to correct function in inventoryService
+      await inventoryService.deleteInventoryItem(itemIndex, itemToDelete);
+      
+      // Update local state
+      setInventory(prevInventory => 
+        prevInventory.filter(item => item.id !== itemId)
+      );
+      
+      // Also remove from low stock items if needed
+      setLowStockItems(prev => prev.filter(i => i.id !== itemId));
+      
+      return true;
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      setErrorMessage(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     } finally {
       setLoading(false);
@@ -260,7 +377,10 @@ export default function Home() {
           <InventoryPage 
             inventory={inventory} 
             setInventory={setInventory} 
-            onSellItem={handleSellItem} 
+            onSellItem={handleSellItem}
+            onAddItem={handleAddItem}
+            onUpdateItem={handleUpdateItem}
+            onDeleteItem={handleDeleteItem}
           />
         ) : (
           <Dashboard 
