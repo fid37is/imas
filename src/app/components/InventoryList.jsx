@@ -3,11 +3,11 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import {
     getInventory,
-    updateItem,
-    deleteItem,
+    updateInventoryItem, // Changed from updateItem
+    deleteInventoryItem, // Changed from deleteItem
     recordSale,
-    addItem,
-    checkAuthentication
+    addInventoryItem, // Changed from addItem
+    // Note: checkAuthentication isn't exported in the provided inventoryService.js
 } from "../utils/inventoryService";
 import { auth } from "../firebase/config";
 import { toast } from "react-hot-toast"; // Assuming you're using react-hot-toast for notifications
@@ -54,6 +54,12 @@ export default function InventoryList() {
         return () => unsubscribe();
     }, []);
 
+    // Function to check authentication - since it's not exported from inventoryService
+    const checkAuthentication = () => {
+        const user = auth.currentUser;
+        return !!user;
+    };
+
     // Function to fetch inventory from Google Sheets
     const fetchInventory = async () => {
         try {
@@ -96,7 +102,11 @@ export default function InventoryList() {
                 return;
             }
 
-            await updateItem(updatedItem);
+            // Use updateInventoryItem with correct parameters
+            // Updated to match what the function expects
+            const rowIndex = parseInt(updatedItem.id);
+            await updateInventoryItem(rowIndex, updatedItem);
+            
             toast.success("Item updated successfully");
 
             // Update local state
@@ -119,7 +129,16 @@ export default function InventoryList() {
                     return;
                 }
 
-                await deleteItem(itemId);
+                // Find the item to be deleted
+                const itemToDelete = items.find(item => item.id === itemId);
+                if (!itemToDelete) {
+                    throw new Error("Item not found");
+                }
+
+                // Use deleteInventoryItem with correct parameters
+                const rowIndex = parseInt(itemId); 
+                await deleteInventoryItem(rowIndex, itemToDelete);
+                
                 toast.success("Item deleted successfully");
 
                 // Update local state
@@ -180,7 +199,8 @@ export default function InventoryList() {
                 lowStockThreshold: parseInt(newItem.lowStockThreshold)
             };
 
-            const result = await addItem(itemToAdd);
+            // Use addInventoryItem instead of addItem
+            const result = await addInventoryItem(itemToAdd);
 
             // Add the new item with its ID to the local state
             setItems([...items, result]);
@@ -276,7 +296,12 @@ export default function InventoryList() {
         if (confirm(`Are you sure you want to delete ${selectedItems.length} items?`)) {
             try {
                 // Delete each selected item
-                const deletePromises = selectedItems.map(id => deleteItem(id));
+                const deletePromises = selectedItems.map(id => {
+                    const rowIndex = parseInt(id);
+                    const itemToDelete = items.find(item => item.id === id);
+                    return deleteInventoryItem(rowIndex, itemToDelete);
+                });
+                
                 await Promise.all(deletePromises);
 
                 // Update local state

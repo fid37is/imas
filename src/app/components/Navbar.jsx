@@ -20,7 +20,7 @@ export default function Navbar({ activeView, setActiveView, user }) {
                     {/* Logo and brand */}
                     <div className="flex items-center">
                         <div className="flex-shrink-0 flex items-center">
-                            <span className="text-xl font-bold text-primary-600">iMAS</span>
+                            <span className="text-xl font-bold text-primary-600">skeepr</span>
                             <span className="ml-2 text-sm text-gray-500 hidden sm:block">
                                 Tool-Up Store
                             </span>

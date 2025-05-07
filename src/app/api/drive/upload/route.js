@@ -1,6 +1,5 @@
-// src/app/api/drive/upload/route.js
 import { NextResponse } from 'next/server';
-import { uploadImageToDrive } from '../../../../lib/googleDriveService';
+import { uploadImage } from '../../../lib/uploadService';
 
 export async function POST(request) {
     try {
@@ -14,21 +13,29 @@ export async function POST(request) {
             );
         }
 
-        // Convert file to stream for Google Drive upload
-        const fileStream = file.stream();
+        // Prepare file for upload
         const fileObject = {
             name: file.name,
             type: file.type,
-            stream: fileStream
+            stream: file.stream(),
+            arrayBuffer: async () => await file.arrayBuffer()
         };
 
-        const fileUrl = await uploadImageToDrive(fileObject);
+        // Upload with fallback to local storage if Google Drive fails
+        const fileUrl = await uploadImage(fileObject);
 
-        return NextResponse.json({ fileUrl });
+        return NextResponse.json({
+            success: true,
+            fileUrl: fileUrl,
+            message: 'File uploaded successfully'
+        });
     } catch (error) {
         console.error('Error in upload API route:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to upload file' },
+            {
+                success: false,
+                error: error.message || 'Failed to upload file'
+            },
             { status: 500 }
         );
     }

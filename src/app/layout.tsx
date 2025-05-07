@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Inventory Management System",
+  title: "skeepr",
   description: "A simple inventory management system built with Next.js",
 };
 

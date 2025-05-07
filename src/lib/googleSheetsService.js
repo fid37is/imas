@@ -24,6 +24,7 @@ export const addRowToSheet = async (sheetId, range, values) => {
 };
 
 // Get rows from Google Sheet
+// Get rows from Google Sheet
 export const getRowsFromSheet = async (sheetId, range) => {
     try {
         await authorizeJwtClient();
@@ -36,10 +37,17 @@ export const getRowsFromSheet = async (sheetId, range) => {
 
         return response.data.values || [];
     } catch (error) {
-        console.error('Error getting rows from sheet:', error);
-        throw error;
+        console.error('Error getting rows from sheet:');
+        if (error.response) {
+            console.error('Status:', error.response.status);
+            console.error('Data:', error.response.data);
+        } else {
+            console.error(error);
+        }
+        throw new Error('Failed to get rows from Google Sheet');
     }
 };
+
 
 // Update row in Google Sheet
 export const updateRowInSheet = async (sheetId, range, values) => {

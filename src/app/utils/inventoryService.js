@@ -1,11 +1,21 @@
 // src/app/utils/inventoryService.js
 import { uploadImageToDrive, deleteFileFromDrive } from './clientDriveService';
-import { addRowToSheet, getRowsFromSheet, updateRowInSheet } from './clientSheetsService';
+import { addRowToSheet, getRowsFromSheet, updateRowInSheet, deleteRowFromSheet } from './clientSheetsService';
 
 // Sheet configuration
-const INVENTORY_SHEET_ID = process.env.NEXT_PUBLIC_INVENTORY_SHEET_ID;
 const INVENTORY_SHEET_RANGE = 'Inventory!A:Z';
 const SALES_SHEET_RANGE = 'Sales!A:Z';
+
+// Helper function to safely parse numbers
+const safeParseInt = (value, defaultValue = 0) => {
+    const parsed = parseInt(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+};
+
+const safeParseFloat = (value, defaultValue = 0) => {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+};
 
 // Add inventory item
 export const addInventoryItem = async (item) => {
@@ -25,19 +35,18 @@ export const addInventoryItem = async (item) => {
 
         // Add item to Google Sheet
         const rowValues = [
-            inventoryItem.name,
-            inventoryItem.description || '',
-            inventoryItem.category,
-            inventoryItem.quantity.toString(),
-            inventoryItem.price.toString(),
-            inventoryItem.costPrice.toString(),
+            inventoryItem.name || '',
+            inventoryItem.category || '',
+            (inventoryItem.quantity || 0).toString(),
+            (inventoryItem.price || 0).toString(),
+            (inventoryItem.costPrice || 0).toString(),
             inventoryItem.sku || '',
-            inventoryItem.lowStockThreshold.toString(),
+            (inventoryItem.lowStockThreshold || 5).toString(),
             inventoryItem.imageUrl || '',
             inventoryItem.createdAt
         ];
 
-        await addRowToSheet(INVENTORY_SHEET_ID, INVENTORY_SHEET_RANGE, rowValues);
+        await addRowToSheet(INVENTORY_SHEET_RANGE, rowValues);
 
         return inventoryItem;
     } catch (error) {
@@ -49,22 +58,31 @@ export const addInventoryItem = async (item) => {
 // Get all inventory items
 export const getInventory = async () => {
     try {
-        const rows = await getRowsFromSheet(INVENTORY_SHEET_ID, INVENTORY_SHEET_RANGE);
+        const rows = await getRowsFromSheet(INVENTORY_SHEET_RANGE);
+        
+        if (!rows || rows.length === 0) {
+            return [];
+        }
 
         // Skip header row and map to objects
-        const items = rows.slice(1).map((row, index) => ({
-            id: index.toString(),
-            name: row[0] || '',
-            description: row[1] || '',
-            category: row[2] || '',
-            quantity: parseInt(row[3]) || 0,
-            price: parseFloat(row[4]) || 0,
-            costPrice: parseFloat(row[5]) || 0,
-            sku: row[6] || '',
-            lowStockThreshold: parseInt(row[7]) || 5,
-            imageUrl: row[8] || '',
-            createdAt: row[9] || new Date().toISOString()
-        }));
+        // Handle potential array structure issues safely
+        const items = rows.slice(1).map((row, index) => {
+            // Ensure row is an array
+            const safeRow = Array.isArray(row) ? row : [];
+            
+            return {
+                id: index.toString(),
+                name: safeRow[0] || '',
+                category: safeRow[1] || '',
+                quantity: safeParseInt(safeRow[2], 0),
+                price: safeParseFloat(safeRow[3], 0),
+                costPrice: safeParseFloat(safeRow[4], 0),
+                sku: safeRow[5] || '',
+                lowStockThreshold: safeParseInt(safeRow[6], 5),
+                imageUrl: safeRow[7] || '',
+                createdAt: safeRow[8] || new Date().toISOString()
+            };
+        });
 
         return items;
     } catch (error) {
@@ -81,34 +99,38 @@ export const updateInventoryItem = async (rowIndex, updatedItem) => {
 
         // If new image is provided, upload it and delete old one
         if (updatedItem.image) {
-            // Upload new image
-            imageUrl = await uploadImageToDrive(updatedItem.image);
+            try {
+                // Upload new image
+                imageUrl = await uploadImageToDrive(updatedItem.image);
 
-            // Delete old image if exists
-            if (updatedItem.imageUrl) {
-                await deleteFileFromDrive(updatedItem.imageUrl).catch(err => {
-                    console.warn('Failed to delete old image:', err);
-                });
+                // Delete old image if exists
+                if (updatedItem.imageUrl) {
+                    await deleteFileFromDrive(updatedItem.imageUrl).catch(err => {
+                        console.warn('Failed to delete old image:', err);
+                    });
+                }
+            } catch (imageError) {
+                console.error('Error handling image update:', imageError);
+                // Continue with update even if image handling fails
             }
         }
 
         // Prepare updated row
         const rowValues = [
-            updatedItem.name,
-            updatedItem.description || '',
-            updatedItem.category,
-            updatedItem.quantity.toString(),
-            updatedItem.price.toString(),
-            updatedItem.costPrice.toString(),
+            updatedItem.name || '',
+            updatedItem.category || '',
+            (updatedItem.quantity || 0).toString(),
+            (updatedItem.price || 0).toString(),
+            (updatedItem.costPrice || 0).toString(),
             updatedItem.sku || '',
-            updatedItem.lowStockThreshold.toString(),
+            (updatedItem.lowStockThreshold || 5).toString(),
             imageUrl || '',
-            updatedItem.createdAt
+            updatedItem.createdAt || new Date().toISOString()
         ];
 
         // Actual row in sheet is rowIndex + 2 (header + 0-based index)
-        const updateRange = `Inventory!A${rowIndex + 2}:J${rowIndex + 2}`;
-        await updateRowInSheet(INVENTORY_SHEET_ID, updateRange, rowValues);
+        const updateRange = `Inventory!A${rowIndex + 2}:I${rowIndex + 2}`;
+        await updateRowInSheet(updateRange, rowValues);
 
         return {
             ...updatedItem,
@@ -130,9 +152,9 @@ export const deleteInventoryItem = async (rowIndex, item) => {
             });
         }
 
-        // Here you would add code to delete the row from the sheet
-        // For now we'll just return true since the implementation isn't shown
-        
+        // Delete the row from the sheet
+        await deleteRowFromSheet('Inventory', rowIndex + 2); // +2 for header row and 0-based index
+
         return true;
     } catch (error) {
         console.error('Error deleting inventory item:', error);
@@ -146,44 +168,44 @@ export const recordSale = async (item, quantity) => {
         // Find the item in inventory
         const inventoryItems = await getInventory();
         const inventoryItem = inventoryItems.find(i => i.id === item.id);
-        
+
         if (!inventoryItem) {
             throw new Error('Item not found in inventory');
         }
-        
+
         if (inventoryItem.quantity < quantity) {
             throw new Error('Not enough items in stock');
         }
-        
+
         // Calculate sale details
         const unitPrice = inventoryItem.price;
         const totalPrice = unitPrice * quantity;
         const costPrice = inventoryItem.costPrice || 0;
         const profit = (unitPrice - costPrice) * quantity;
-        
+
         // Add sale record to sales sheet
         const saleRow = [
             new Date().toISOString(),
-            inventoryItem.name,
+            inventoryItem.name || '',
             inventoryItem.sku || '',
             quantity.toString(),
             unitPrice.toString(),
             totalPrice.toString(),
             costPrice.toString(),
             profit.toString(),
-            inventoryItem.id
+            inventoryItem.id || ''
         ];
-        
-        await addRowToSheet(INVENTORY_SHEET_ID, SALES_SHEET_RANGE, saleRow);
-        
+
+        await addRowToSheet(SALES_SHEET_RANGE, saleRow);
+
         // Update inventory quantity
         const updatedItem = {
             ...inventoryItem,
-            quantity: inventoryItem.quantity - quantity
+            quantity: Math.max(0, inventoryItem.quantity - quantity)
         };
-        
+
         await updateInventoryItem(parseInt(inventoryItem.id), updatedItem);
-        
+
         return {
             id: new Date().getTime().toString(),
             timestamp: new Date().toISOString(),
@@ -203,22 +225,31 @@ export const recordSale = async (item, quantity) => {
 // Get all sales
 export const getSales = async () => {
     try {
-        const rows = await getRowsFromSheet(INVENTORY_SHEET_ID, SALES_SHEET_RANGE);
+        const rows = await getRowsFromSheet(SALES_SHEET_RANGE);
         
+        if (!rows || rows.length === 0) {
+            return [];
+        }
+
         // Skip header row and map to objects
-        const sales = rows.slice(1).map((row, index) => ({
-            id: index.toString(),
-            timestamp: row[0] || '',
-            itemName: row[1] || '',
-            sku: row[2] || '',
-            quantity: parseInt(row[3]) || 0,
-            unitPrice: parseFloat(row[4]) || 0,
-            totalPrice: parseFloat(row[5]) || 0,
-            costPrice: parseFloat(row[6]) || 0,
-            profit: parseFloat(row[7]) || 0,
-            itemId: row[8] || ''
-        }));
-        
+        const sales = rows.slice(1).map((row, index) => {
+            // Ensure row is an array
+            const safeRow = Array.isArray(row) ? row : [];
+            
+            return {
+                id: index.toString(),
+                timestamp: safeRow[0] || '',
+                itemName: safeRow[1] || '',
+                sku: safeRow[2] || '',
+                quantity: safeParseInt(safeRow[3], 0),
+                unitPrice: safeParseFloat(safeRow[4], 0),
+                totalPrice: safeParseFloat(safeRow[5], 0),
+                costPrice: safeParseFloat(safeRow[6], 0),
+                profit: safeParseFloat(safeRow[7], 0),
+                itemId: safeRow[8] || ''
+            };
+        });
+
         return sales;
     } catch (error) {
         console.error('Error getting sales:', error);

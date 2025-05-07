@@ -7,8 +7,8 @@ export const theme = {
         colors: {
             primary: {
                 400: '#4f85e6', // lighter blue
-                500: '#3366cc', // main blue
-                700: '#1a3366', // darker blue
+                500: '#6666AA', // main blue
+                700: '#222288', // darker blue
             },
             accent: {
                 400: '#ffcc66', // lighter gold

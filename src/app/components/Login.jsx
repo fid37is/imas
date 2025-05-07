@@ -41,7 +41,7 @@ export default function Login() {
         <div className="min-h-screen flex items-center justify-center bg-primary-50">
             <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-primary-600">iMAS</h1>
+                    <h1 className="text-3xl font-bold text-primary-600">skeepr</h1>
                     <p className="text-gray-600 mt-2">Inventory Management System</p>
                 </div>
 

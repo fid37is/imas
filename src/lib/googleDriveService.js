@@ -1,80 +1,33 @@
-// src/lib/googleDriveService.js
-import { authorizeJwtClient, getDrive } from './googleAuth';
+import { uploadImageToDrive, saveFileLocally } from './googleDriveService';
 
-// Upload image or file to Google Drive
-export const uploadImageToDrive = async (file) => {
+/**
+ * Upload image with fallback handling
+ * @param {File|Object} file - File object to upload
+ * @param {boolean} useLocalFallback - Whether to use local fallback when Google Drive fails
+ * @returns {Promise<string>} URL of the uploaded file
+ */
+export async function uploadImage(file, useLocalFallback = true) {
     try {
-        await authorizeJwtClient();
-        const drive = getDrive();
+        // Try Google Drive first
+        try {
+            const fileUrl = await uploadImageToDrive(file);
+            console.log('Successfully uploaded to Google Drive:', fileUrl);
+            return fileUrl;
+        } catch (driveError) {
+            console.warn('Google Drive upload failed:', driveError.message);
 
-        // Create file metadata
-        const fileMetadata = {
-            name: `inventory_${Date.now()}_${file.name || 'file'}`,
-            parents: [process.env.GOOGLE_DRIVE_FOLDER_ID] // Folder ID where to store images
-        };
-
-        // Create file in Google Drive
-        const response = await drive.files.create({
-            resource: fileMetadata,
-            media: {
-                mimeType: file.type,
-                body: file.stream || file
-            },
-            fields: 'id,webViewLink'
-        });
-
-        // Make the file public
-        await drive.permissions.create({
-            fileId: response.data.id,
-            requestBody: {
-                role: 'reader',
-                type: 'anyone'
+            // If fallback is enabled and we got a Drive error, try local storage
+            if (useLocalFallback) {
+                console.log('Falling back to local storage...');
+                const localUrl = await saveFileLocally(file);
+                console.log('Successfully saved locally:', localUrl);
+                return localUrl;
+            } else {
+                throw driveError;
             }
-        });
-
-        // Get the direct download URL
-        const getUrl = await drive.files.get({
-            fileId: response.data.id,
-            fields: 'webContentLink'
-        });
-
-        return getUrl.data.webContentLink;
-    } catch (error) {
-        console.error("Error uploading to Google Drive:", error);
-        throw error;
-    }
-};
-
-// Delete a file from Google Drive
-export const deleteFileFromDrive = async (fileUrl) => {
-    try {
-        // Extract file ID from the URL
-        const fileId = extractFileIdFromUrl(fileUrl);
-
-        if (!fileId) {
-            throw new Error("Invalid file URL");
         }
-
-        await authorizeJwtClient();
-        const drive = getDrive();
-
-        // Delete the file
-        await drive.files.delete({
-            fileId: fileId
-        });
-
-        return true;
     } catch (error) {
-        console.error("Error deleting file from Google Drive:", error);
+        console.error('Upload failed:', error);
         throw error;
     }
-};
-
-// Helper function to extract file ID from Google Drive URL
-export const extractFileIdFromUrl = (url) => {
-    if (!url) return null;
-
-    // Look for the ID in the URL structure
-    const match = url.match(/[-\w]{25,}/);
-    return match ? match[0] : null;
-};
+}

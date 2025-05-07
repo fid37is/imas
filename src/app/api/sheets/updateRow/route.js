@@ -1,8 +1,8 @@
-// app/api/sheets/addRow/route.js
+// app/api/sheets/updateRow/route.js
 import { NextResponse } from 'next/server';
 import { getSheetsClient } from '../utils';
 
-export async function POST(request) {
+export async function PUT(request) {
     try {
         const { sheetId, range, values } = await request.json();
 
@@ -14,11 +14,10 @@ export async function POST(request) {
         }
 
         const sheets = await getSheetsClient();
-        const response = await sheets.spreadsheets.values.append({
+        const response = await sheets.spreadsheets.values.update({
             spreadsheetId: sheetId,
             range: range,
             valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
             resource: {
                 values: [values],
             },
@@ -27,11 +26,11 @@ export async function POST(request) {
         return NextResponse.json({
             result: {
                 success: true,
-                updatedRows: response.data.updates?.updatedRows
+                updatedCells: response.data.updatedCells
             }
         });
     } catch (error) {
-        console.error('Error in addRow API route:', error);
+        console.error('Error in updateRow API route:', error);
         return NextResponse.json(
             { error: error.message },
             { status: 500 }

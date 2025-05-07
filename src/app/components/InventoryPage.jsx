@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import AddItemModal from './AddItemModal';
 import InventoryList from './InventoryList';
-import { addItem, updateItem, deleteItem } from '../utils/inventoryService';
+import { addInventoryItem, updateInventoryItem, deleteInventoryItem } from '../utils/inventoryService';
 
 // Custom Alert Component
 const CustomAlert = ({ message, type, isOpen, onClose }) => {
@@ -133,7 +133,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         try {
             setIsLoading(true);
             // Add to database and get ID
-            const itemWithId = await addItem(newItem);
+            const itemWithId = await addInventoryItem(newItem);
 
             // Update local state
             setInventory([...inventory, itemWithId]);
@@ -152,7 +152,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         try {
             setIsLoading(true);
             // Update in database
-            await updateItem(updatedItem);
+            await updateInventoryItem(updatedItem);
 
             // Update local state
             const updatedInventory = inventory.map(item =>
@@ -183,7 +183,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 try {
                     setIsLoading(true);
                     // Delete from database
-                    await deleteItem(itemId);
+                    await deleteInventoryItem(itemId);
 
                     // Update local state
                     setInventory(inventory.filter(item => item.id !== itemId));
@@ -213,7 +213,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                     setIsLoading(true);
                     // Delete from database one by one
                     for (const itemId of selectedItems) {
-                        await deleteItem(itemId);
+                        await deleteInventoryItem(itemId);
                     }
 
                     // Update local state

@@ -3,7 +3,11 @@ import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase/config";
 // Import the correct functions from inventoryService
-import * as inventoryService from "../app/utils/inventoryService";
+import { 
+  getInventory, 
+  getSales,
+  recordSale
+} from "../app/utils/inventoryService";
 
 import Login from "./components/Login";
 import Navbar from "./components/Navbar";
@@ -64,6 +68,18 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLowStockAlert, setShowLowStockAlert] = useState<boolean>(false);
 
+  interface RawInventoryItem {
+    id: string;
+    name: string;
+    category?: string;
+    quantity: number;
+    price: number;
+    sku?: string;
+    costPrice?: number;
+    lowStockThreshold: number;
+    imageUrl?: string;
+  }
+  
   // Clear error after 5 seconds
   useEffect(() => {
     if (errorMessage) {
@@ -91,10 +107,10 @@ export default function Home() {
         setLoading(true);
         try {
           // Load inventory data
-          const rawInventoryData = await inventoryService.getInventory();
+          const rawInventoryData = await getInventory();
           
           // Transform the data to match our InventoryItem interface
-          const formattedInventory: InventoryItem[] = rawInventoryData.map(item => ({
+          const formattedInventory: InventoryItem[] = rawInventoryData.map((item: RawInventoryItem) => ({
             id: item.id,
             name: item.name,
             category: item.category || 'Uncategorized',
@@ -104,8 +120,9 @@ export default function Home() {
             costPrice: item.costPrice,
             lowStockThreshold: item.lowStockThreshold,
             imageUrl: item.imageUrl,
-            lastUpdated: new Date().toISOString() // Add missing lastUpdated field
+            lastUpdated: new Date().toISOString()
           }));
+          
           
           setInventory(formattedInventory);
 
@@ -120,16 +137,10 @@ export default function Home() {
             setShowLowStockAlert(true);
           }
 
-          // Load sales data - if getSales is implemented
+          // Load sales data
           try {
-            if (typeof inventoryService.getSales === 'function') {
-              const sales = await inventoryService.getSales();
-              setSalesData(sales as SaleRecord[]);
-            } else {
-              // If getSales doesn't exist, initialize with empty array
-              setSalesData([]);
-              console.warn('getSales function not available in inventoryService');
-            }
+            const sales = await getSales();
+            setSalesData(sales as SaleRecord[]);
           } catch (error) {
             console.error("Error loading sales data:", error);
             setSalesData([]);
@@ -166,7 +177,7 @@ export default function Home() {
       };
       
       // Record the sale - this automatically updates inventory quantities
-      await inventoryService.recordSale(saleData, quantity);
+      await recordSale(saleData, quantity);
       
       // Update local state
       // Add sale to sales data - this is a simplification and might need adjustment
@@ -208,112 +219,6 @@ export default function Home() {
     } catch (error) {
       console.error("Error selling item:", error);
       setErrorMessage(`Failed to process sale: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Add a new item to inventory
-  const handleAddItem = async (newItem: Omit<InventoryItem, "id" | "lastUpdated">) => {
-    try {
-      setLoading(true);
-      
-      // Create a complete inventory item
-      const completeItem: InventoryItem = {
-        ...newItem,
-        id: `item-${Date.now()}`, // Generate unique ID
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // Add item using inventoryService - Map to correct function in inventoryService
-      await inventoryService.addInventoryItem(completeItem);
-      
-      // Update local state
-      setInventory(prevInventory => [...prevInventory, completeItem]);
-      
-      return true;
-    } catch (error) {
-      console.error("Error adding item:", error);
-      setErrorMessage(`Failed to add item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Update an existing item
-  const handleUpdateItem = async (updatedItem: InventoryItem) => {
-    try {
-      setLoading(true);
-      
-      // Update with current timestamp
-      const itemWithTimestamp = {
-        ...updatedItem,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      // Update item using inventoryService - Map to correct function in inventoryService
-      // We need to pass the row index which we can derive from the id
-      const itemIndex = parseInt(updatedItem.id);
-      await inventoryService.updateInventoryItem(itemIndex, itemWithTimestamp);
-      
-      // Update local state
-      setInventory(prevInventory => 
-        prevInventory.map(item => 
-          item.id === updatedItem.id ? itemWithTimestamp : item
-        )
-      );
-      
-      // Check if this update affects low stock status
-      if (itemWithTimestamp.quantity <= itemWithTimestamp.lowStockThreshold) {
-        if (!lowStockItems.some(i => i.id === itemWithTimestamp.id)) {
-          setLowStockItems(prev => [...prev, itemWithTimestamp]);
-          setShowLowStockAlert(true);
-        }
-      } else {
-        // Remove from low stock if quantity now above threshold
-        setLowStockItems(prev => prev.filter(i => i.id !== itemWithTimestamp.id));
-      }
-      
-      return true;
-    } catch (error) {
-      console.error("Error updating item:", error);
-      setErrorMessage(`Failed to update item: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Delete an item
-  const handleDeleteItem = async (itemId: string) => {
-    try {
-      setLoading(true);
-      
-      // Parse itemId to get row index
-      const itemIndex = parseInt(itemId);
-      const itemToDelete = inventory.find(item => item.id === itemId);
-      
-      if (!itemToDelete) {
-        throw new Error("Item not found");
-      }
-      
-      // Delete item using inventoryService - Map to correct function in inventoryService
-      await inventoryService.deleteInventoryItem(itemIndex, itemToDelete);
-      
-      // Update local state
-      setInventory(prevInventory => 
-        prevInventory.filter(item => item.id !== itemId)
-      );
-      
-      // Also remove from low stock items if needed
-      setLowStockItems(prev => prev.filter(i => i.id !== itemId));
-      
-      return true;
-    } catch (error) {
-      console.error("Error deleting item:", error);
-      setErrorMessage(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     } finally {
       setLoading(false);
@@ -363,7 +268,7 @@ export default function Home() {
           </div>
           <p className="mb-2">The following items need restocking:</p>
           <ul className="list-disc pl-5">
-            {lowStockItems.map(item => (
+            {lowStockItems.map((item) => (
               <li key={item.id}>
                 {item.name}: {item.quantity} remaining
               </li>
@@ -373,24 +278,21 @@ export default function Home() {
       )}
       
       <div className="container mx-auto py-6 px-4">
-        {activeView === "inventory" ? (
+        {activeView === "inventory" && (
           <InventoryPage 
-            inventory={inventory} 
-            setInventory={setInventory} 
+            inventory={inventory}
+            setInventory={setInventory}
             onSellItem={handleSellItem}
-            onAddItem={handleAddItem}
-            onUpdateItem={handleUpdateItem}
-            onDeleteItem={handleDeleteItem}
           />
-        ) : (
+        )}
+        
+        {activeView === "dashboard" && (
           <Dashboard 
-            inventory={inventory} 
             salesData={salesData} 
+            inventory={inventory}
           />
         )}
       </div>
-      
-      {loading && <Loading />}
     </div>
   );
 }
