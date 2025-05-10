@@ -1,6 +1,7 @@
 // src/app/utils/inventoryService.js
 import { uploadImageToDrive, deleteFileFromDrive } from './clientDriveService';
 import { addRowToSheet, getRowsFromSheet, updateRowInSheet, deleteRowFromSheet } from './clientSheetsService';
+import { generateItemId } from './idGenerator';
 
 // Sheet configuration
 const INVENTORY_SHEET_RANGE = 'Inventory!A:Z';
@@ -26,15 +27,24 @@ export const addInventoryItem = async (item) => {
             imageUrl = await uploadImageToDrive(item.image);
         }
 
-        // Create inventory item with image URL
+        // Get all existing IDs to ensure uniqueness
+        const existingItems = await getInventory();
+        const existingIds = existingItems.map(item => item.id);
+
+        // Generate a store-specific ID if one doesn't exist
+        const id = item.id || generateItemId(existingIds);
+
+        // Create inventory item with image URL and ID
         const inventoryItem = {
             ...item,
+            id,
             imageUrl,
-            createdAt: new Date().toISOString()
+            createdAt: item.createdAt || new Date().toISOString()
         };
 
         // Add item to Google Sheet
         const rowValues = [
+            inventoryItem.id || '',             // Add ID field as first column
             inventoryItem.name || '',
             inventoryItem.category || '',
             (inventoryItem.quantity || 0).toString(),
@@ -43,7 +53,8 @@ export const addInventoryItem = async (item) => {
             inventoryItem.sku || '',
             (inventoryItem.lowStockThreshold || 5).toString(),
             inventoryItem.imageUrl || '',
-            inventoryItem.createdAt
+            inventoryItem.createdAt,
+            inventoryItem.description || ''     // Add description field
         ];
 
         await addRowToSheet(INVENTORY_SHEET_RANGE, rowValues);
@@ -65,22 +76,23 @@ export const getInventory = async () => {
         }
 
         // Skip header row and map to objects
-        // Handle potential array structure issues safely
-        const items = rows.slice(1).map((row, index) => {
+        // Use the actual ID from the sheet instead of the array index
+        const items = rows.slice(1).map((row) => {
             // Ensure row is an array
             const safeRow = Array.isArray(row) ? row : [];
             
             return {
-                id: index.toString(),
-                name: safeRow[0] || '',
-                category: safeRow[1] || '',
-                quantity: safeParseInt(safeRow[2], 0),
-                price: safeParseFloat(safeRow[3], 0),
-                costPrice: safeParseFloat(safeRow[4], 0),
-                sku: safeRow[5] || '',
-                lowStockThreshold: safeParseInt(safeRow[6], 5),
-                imageUrl: safeRow[7] || '',
-                createdAt: safeRow[8] || new Date().toISOString()
+                id: safeRow[0] || '',           // Use the ID from the sheet
+                name: safeRow[1] || '',
+                category: safeRow[2] || '',
+                quantity: safeParseInt(safeRow[3], 0),
+                price: safeParseFloat(safeRow[4], 0),
+                costPrice: safeParseFloat(safeRow[5], 0),
+                sku: safeRow[6] || '',
+                lowStockThreshold: safeParseInt(safeRow[7], 5),
+                imageUrl: safeRow[8] || '',
+                createdAt: safeRow[9] || new Date().toISOString(),
+                description: safeRow[10] || ''   // Add description field
             };
         });
 
@@ -91,9 +103,43 @@ export const getInventory = async () => {
     }
 };
 
-// Update inventory item
-export const updateInventoryItem = async (rowIndex, updatedItem) => {
+// Find item row index by ID
+export const findItemRowIndexById = async (itemId) => {
     try {
+        const rows = await getRowsFromSheet(INVENTORY_SHEET_RANGE);
+        
+        if (!rows || rows.length <= 1) {
+            throw new Error('Item not found');
+        }
+
+        // Skip header row and find the row with matching ID
+        const rowIndex = rows.findIndex((row, index) => {
+            // Skip header row
+            if (index === 0) return false;
+            
+            // Ensure row is an array
+            const safeRow = Array.isArray(row) ? row : [];
+            
+            return safeRow[0] === itemId;
+        });
+
+        if (rowIndex === -1) {
+            throw new Error(`Item with ID ${itemId} not found`);
+        }
+
+        return rowIndex;
+    } catch (error) {
+        console.error('Error finding item row index:', error);
+        throw error;
+    }
+};
+
+// Update inventory item
+export const updateInventoryItem = async (itemId, updatedItem) => {
+    try {
+        // Find the row index of the item by ID
+        const rowIndex = await findItemRowIndexById(itemId);
+
         // Handle image update if needed
         let imageUrl = updatedItem.imageUrl;
 
@@ -115,8 +161,12 @@ export const updateInventoryItem = async (rowIndex, updatedItem) => {
             }
         }
 
+        // Ensure we keep the original ID
+        const id = updatedItem.id || itemId;
+
         // Prepare updated row
         const rowValues = [
+            id,                             // Keep original ID
             updatedItem.name || '',
             updatedItem.category || '',
             (updatedItem.quantity || 0).toString(),
@@ -125,11 +175,12 @@ export const updateInventoryItem = async (rowIndex, updatedItem) => {
             updatedItem.sku || '',
             (updatedItem.lowStockThreshold || 5).toString(),
             imageUrl || '',
-            updatedItem.createdAt || new Date().toISOString()
+            updatedItem.createdAt || new Date().toISOString(),
+            updatedItem.description || ''     // Include description field
         ];
 
-        // Actual row in sheet is rowIndex + 2 (header + 0-based index)
-        const updateRange = `Inventory!A${rowIndex + 2}:I${rowIndex + 2}`;
+        // Update in sheet (rowIndex is 0-based, but sheet rows are 1-based)
+        const updateRange = `Inventory!A${rowIndex + 1}:K${rowIndex + 1}`;
         await updateRowInSheet(updateRange, rowValues);
 
         return {
@@ -143,8 +194,19 @@ export const updateInventoryItem = async (rowIndex, updatedItem) => {
 };
 
 // Delete inventory item
-export const deleteInventoryItem = async (rowIndex, item) => {
+export const deleteInventoryItem = async (itemId) => {
     try {
+        // Find the item first to get its data
+        const inventory = await getInventory();
+        const item = inventory.find(i => i.id === itemId);
+        
+        if (!item) {
+            throw new Error(`Item with ID ${itemId} not found`);
+        }
+        
+        // Find the row index of the item by ID
+        const rowIndex = await findItemRowIndexById(itemId);
+
         // Delete image if it exists
         if (item.imageUrl) {
             await deleteFileFromDrive(item.imageUrl).catch(err => {
@@ -152,8 +214,8 @@ export const deleteInventoryItem = async (rowIndex, item) => {
             });
         }
 
-        // Delete the row from the sheet
-        await deleteRowFromSheet('Inventory', rowIndex + 2); // +2 for header row and 0-based index
+        // Delete the row from the sheet (rowIndex is 0-based, but sheet rows are 1-based)
+        await deleteRowFromSheet('Inventory', rowIndex + 1);
 
         return true;
     } catch (error) {
@@ -204,7 +266,7 @@ export const recordSale = async (item, quantity) => {
             quantity: Math.max(0, inventoryItem.quantity - quantity)
         };
 
-        await updateInventoryItem(parseInt(inventoryItem.id), updatedItem);
+        await updateInventoryItem(inventoryItem.id, updatedItem);
 
         return {
             id: new Date().getTime().toString(),
