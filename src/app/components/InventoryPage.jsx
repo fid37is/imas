@@ -430,7 +430,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                     isOpen={isAddModalOpen}
                     onClose={handleCloseModal}
                     onSave={editingItem ? handleUpdateItem : handleAddItem}
-                    item={editingItem || null}
+                    itemToEdit={editingItem || null}
                     isEditing={!!editingItem}
                 />
             )}
