@@ -1,30 +1,53 @@
-// /src/app/api/sheets/route.js
-
 import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
+
+// Create JWT client - supports both base64 credentials and individual env vars
+const createJwtClient = () => {
+    try {
+        if (process.env.GOOGLE_CREDENTIALS_B64) {
+            // Use full credentials from base64-encoded JSON
+            const decoded = Buffer.from(process.env.GOOGLE_CREDENTIALS_B64, 'base64').toString('utf-8');
+            const credentials = JSON.parse(decoded);
+
+            return new google.auth.JWT(
+                credentials.client_email,
+                null,
+                credentials.private_key,
+                ['https://www.googleapis.com/auth/spreadsheets']
+            );
+        } else {
+            // Use individual environment variables (original implementation)
+            const credentials = {
+                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+            };
+
+            // Validate credentials to prevent undefined errors
+            if (!credentials.client_email || !credentials.private_key) {
+                throw new Error('Missing Google Sheets credentials');
+            }
+
+            return new google.auth.JWT(
+                credentials.client_email,
+                null,
+                credentials.private_key,
+                ['https://www.googleapis.com/auth/spreadsheets']
+            );
+        }
+    } catch (error) {
+        console.error('Error creating JWT client:', error);
+        throw new Error('Failed to create authentication client: ' + error.message);
+    }
+};
 
 // Get Google Sheets client with credentials
 async function getSheetsClient() {
     try {
-        // Get credentials from environment variables
-        const credentials = {
-            client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        };
-
-        // Create auth client
-        const auth = new google.auth.JWT(
-            credentials.client_email,
-            null,
-            credentials.private_key,
-            ['https://www.googleapis.com/auth/spreadsheets']
-        );
-
-        // Return initialized sheets client
+        const auth = createJwtClient();
         return google.sheets({ version: 'v4', auth });
     } catch (error) {
         console.error('Error initializing Google Sheets client:', error);
-        return NextResponse.json({ error: 'Failed to initialize Google Sheets client' }, { status: 500 });
+        throw new Error('Failed to initialize Google Sheets client');
     }
 }
 
@@ -51,7 +74,13 @@ export async function GET(request) {
             range: range,
         });
 
-        // Return rows
+        // Ensure we have a valid response with data
+        if (!response || !response.data) {
+            console.error('Invalid response from Google Sheets API:', response);
+            return NextResponse.json({ error: 'Invalid response from Google Sheets API' }, { status: 500 });
+        }
+
+        // Return rows (even if empty)
         const rows = response.data.values || [];
         return NextResponse.json({ rows }, { status: 200 });
     } catch (error) {
