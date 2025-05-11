@@ -52,16 +52,16 @@ export default function InventoryList({
     // New function to handle the sell process with loading state
     const handleCompleteSale = async () => {
         if (!sellModalItem) return;
-        
+
         setIsSellingLoading(true);
-        
+
         try {
             // Complete the sale with the parent component's function
             await onSellItem(sellModalItem, sellQuantity);
-            
+
             // Show success message
             setShowSuccessMessage(true);
-            
+
             // Keep the modal open for a moment to show the success message
             setTimeout(() => {
                 setSellModalItem(null);
@@ -77,9 +77,9 @@ export default function InventoryList({
     // Format currency
     const formatCurrency = (value) => {
         if (typeof value !== 'number' || isNaN(value)) {
-            return '$0.00';
+            return '₦0.00';
         }
-        return `$${value.toFixed(2)}`;
+        return `₦${value.toFixed(2)}`;
     };
 
     // Truncate text with ellipsis
@@ -146,7 +146,7 @@ export default function InventoryList({
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {items.map((item) => (
-                                <tr 
+                                <tr
                                     key={item.id}
                                     className={isLowStock(item) ? "bg-red-50" : undefined}
                                 >
@@ -236,7 +236,7 @@ export default function InventoryList({
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
                         <h2 className="text-lg font-semibold mb-4">Sell Item: {sellModalItem.name}</h2>
-                        
+
                         {showSuccessMessage ? (
                             <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md flex items-center">
                                 <Check className="h-5 w-5 mr-2" />
@@ -248,7 +248,7 @@ export default function InventoryList({
                                     <p className="text-gray-600 mb-2">Available: {sellModalItem.quantity}</p>
                                     <p className="text-gray-600 mb-2">Price: {formatCurrency(sellModalItem.price)}</p>
                                 </div>
-                                
+
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">
                                         Quantity to sell:
@@ -262,7 +262,7 @@ export default function InventoryList({
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                     />
                                 </div>
-                                
+
                                 <div className="mb-4">
                                     <p className="font-medium">
                                         Total: {formatCurrency((sellModalItem.price || 0) * sellQuantity)}
@@ -270,7 +270,7 @@ export default function InventoryList({
                                 </div>
                             </>
                         )}
-                        
+
                         <div className="flex justify-end space-x-3">
                             <button
                                 onClick={() => setSellModalItem(null)}

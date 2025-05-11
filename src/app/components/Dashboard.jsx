@@ -2,8 +2,13 @@
 import { useState, useEffect } from "react";
 import { Chart } from "chart.js/auto";
 
-export default function Dashboard({ inventory = [], salesData = [] }) {
-    // Initialize with default values to prevent undefined errors
+const currencyFormatter = new Intl.NumberFormat('en-NG', {
+    style: 'currency',
+    currency: 'NGN',
+    minimumFractionDigits: 2,
+});
+
+export default function Dashboard({ inventory, salesData }) {
     const [totalInventoryValue, setTotalInventoryValue] = useState(0);
     const [totalItems, setTotalItems] = useState(0);
     const [lowStockItems, setLowStockItems] = useState(0);
@@ -11,120 +16,93 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
     const [profit, setProfit] = useState(0);
     const [topSellingItems, setTopSellingItems] = useState([]);
     const [categoryDistribution, setCategoryDistribution] = useState([]);
-    const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'sales', 'inventory'
+    const [activeTab, setActiveTab] = useState('overview');
 
     useEffect(() => {
-        // Calculate dashboard metrics
         calculateMetrics();
-
-        // Create charts with a small delay to ensure DOM is ready
         const timeout = setTimeout(() => {
             createCharts();
         }, 100);
 
-        // Cleanup charts on unmount
         return () => {
             clearTimeout(timeout);
             if (typeof window !== 'undefined') {
                 const charts = Chart.instances || {};
-                Object.keys(charts).forEach(key => {
-                    charts[key].destroy();
-                });
+                Object.keys(charts).forEach(key => charts[key].destroy());
             }
         };
     }, [inventory, salesData, activeTab]);
 
     const calculateMetrics = () => {
-        // Handle case where inventory is undefined
-        const safeInventory = inventory || [];
-        const safeSalesData = salesData || [];
-        
-        // Calculate total inventory value and count
+        const inventoryArray = Array.isArray(inventory) ? inventory : [];
         let totalValue = 0;
         let lowStock = 0;
 
-        safeInventory.forEach(item => {
-            totalValue += (item.price || 0) * (item.quantity || 0);
-            if (item.quantity <= item.lowStockThreshold) {
-                lowStock++;
-            }
+        inventoryArray.forEach(item => {
+            const price = Number(item?.price) || 0;
+            const quantity = Number(item?.quantity) || 0;
+            totalValue += price * quantity;
+            if (quantity <= (item?.lowStockThreshold || 0)) lowStock++;
         });
 
         setTotalInventoryValue(totalValue);
-        setTotalItems(safeInventory.length);
+        setTotalItems(inventoryArray.length);
         setLowStockItems(lowStock);
 
-        // Calculate sales metrics if data is available
-        if (safeSalesData && safeSalesData.length) {
-            const salesSum = safeSalesData.reduce((sum, sale) => sum + (sale.total || 0), 0);
-            const profitSum = safeSalesData.reduce((sum, sale) => sum + (sale.profit || 0), 0);
+        const salesArray = Array.isArray(salesData) ? salesData : [];
 
-            setTotalSales(salesSum);
-            setProfit(profitSum);
+        let salesSum = 0;
+        let profitSum = 0;
+        const itemSales = {};
 
-            // Calculate top selling items
-            const itemSales = {};
-            safeSalesData.forEach(sale => {
-                if (itemSales[sale.itemId]) {
-                    itemSales[sale.itemId].quantity += (sale.quantity || 0);
-                    itemSales[sale.itemId].total += (sale.total || 0);
-                } else {
-                    itemSales[sale.itemId] = {
-                        id: sale.itemId,
-                        name: sale.itemName || "Unknown Item",
-                        quantity: sale.quantity || 0,
-                        total: sale.total || 0
+        salesArray.forEach(sale => {
+            const saleTotal = Number(sale?.totalPrice ?? sale?.total ?? 0);
+            const saleProfit = Number(sale?.profit ?? 0);
+            const itemId = sale?.itemId;
+
+            salesSum += saleTotal;
+            profitSum += saleProfit;
+
+            if (itemId) {
+                if (!itemSales[itemId]) {
+                    itemSales[itemId] = {
+                        id: itemId,
+                        name: sale?.itemName || 'Unknown Item',
+                        quantity: 0,
+                        total: 0,
                     };
                 }
-            });
-
-            const topItems = Object.values(itemSales)
-                .sort((a, b) => b.quantity - a.quantity)
-                .slice(0, 5);
-
-            setTopSellingItems(topItems);
-        }
-
-        // Calculate category distribution
-        const categories = {};
-        safeInventory.forEach(item => {
-            if (item.category) {
-                if (categories[item.category]) {
-                    categories[item.category]++;
-                } else {
-                    categories[item.category] = 1;
-                }
+                itemSales[itemId].quantity += Number(sale?.quantity) || 0;
+                itemSales[itemId].total += saleTotal;
             }
         });
 
-        const categoryData = Object.entries(categories).map(([name, count]) => ({
-            name,
-            count
-        }));
+        setTotalSales(salesSum);
+        setProfit(profitSum);
+        setTopSellingItems(Object.values(itemSales).sort((a, b) => b.quantity - a.quantity).slice(0, 5));
 
+        const categories = {};
+        inventoryArray.forEach(item => {
+            if (item?.category) {
+                categories[item.category] = (categories[item.category] || 0) + 1;
+            }
+        });
+
+        const categoryData = Object.entries(categories).map(([name, count]) => ({ name, count }));
         setCategoryDistribution(categoryData);
     };
 
     const createCharts = () => {
-        // Create sales over time chart
-        if (salesData && salesData.length && document.getElementById('salesChart')) {
+        const salesArray = Array.isArray(salesData) ? salesData : [];
+        if (salesArray.length > 0 && document.getElementById('salesChart')) {
             const ctx = document.getElementById('salesChart').getContext('2d');
-            
-            // Destroy existing chart if it exists
-            if (Chart.getChart(ctx)) {
-                Chart.getChart(ctx).destroy();
-            }
+            if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
 
-            // Group sales by date
             const salesByDate = {};
-            salesData.forEach(sale => {
-                if (!sale.date) return;
-                
-                const date = new Date(sale.date).toLocaleDateString();
-                if (salesByDate[date]) {
-                    salesByDate[date] += (sale.total || 0);
-                } else {
-                    salesByDate[date] = (sale.total || 0);
+            salesArray.forEach(sale => {
+                if (sale?.timestamp || sale?.date) {
+                    const date = new Date(sale.timestamp || sale.date).toLocaleDateString();
+                    salesByDate[date] = (salesByDate[date] || 0) + Number(sale?.totalPrice ?? sale?.total ?? 0);
                 }
             });
 
@@ -135,7 +113,7 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                 data: {
                     labels: sortedDates,
                     datasets: [{
-                        label: 'Sales ($)',
+                        label: 'Sales (₦)',
                         data: sortedDates.map(date => salesByDate[date]),
                         borderColor: '#2563eb',
                         backgroundColor: 'rgba(37, 99, 235, 0.1)',
@@ -146,32 +124,18 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    },
+                    scales: { y: { beginAtZero: true } },
                     plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false
-                        }
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
                     }
                 }
             });
         }
 
-        // Create category distribution chart
         if (categoryDistribution.length && document.getElementById('categoryChart')) {
             const ctx = document.getElementById('categoryChart').getContext('2d');
-            
-            // Destroy existing chart if it exists
-            if (Chart.getChart(ctx)) {
-                Chart.getChart(ctx).destroy();
-            }
+            if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
 
             new Chart(ctx, {
                 type: 'pie',
@@ -191,10 +155,7 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                     plugins: {
                         legend: {
                             position: 'right',
-                            labels: {
-                                boxWidth: 12,
-                                padding: 15
-                            }
+                            labels: { boxWidth: 12, padding: 15 }
                         }
                     }
                 }
@@ -202,41 +163,43 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
         }
     };
 
+    const formatCurrency = (value) => {
+        const num = Number(value);
+        return isNaN(num) ? '₦0.00' : currencyFormatter.format(num);
+    };
+
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Dashboard</h1>
-                
+
                 {/* Tab navigation */}
                 <div className="w-full sm:w-auto">
                     <div className="flex bg-gray-100 p-1 rounded-md shadow-sm">
-                        <button 
+                        <button
                             onClick={() => setActiveTab('overview')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                                activeTab === 'overview' 
-                                    ? 'bg-white shadow text-primary-600 font-medium' 
+                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'overview'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
                                     : 'text-gray-600 hover:text-primary-500'
-                            }`}
+                                }`}
                         >
                             Overview
                         </button>
-                        <button 
+                        <button
                             onClick={() => setActiveTab('sales')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                                activeTab === 'sales' 
-                                    ? 'bg-white shadow text-primary-600 font-medium' 
+                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'sales'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
                                     : 'text-gray-600 hover:text-primary-500'
-                            }`}
+                                }`}
                         >
                             Sales
                         </button>
-                        <button 
+                        <button
                             onClick={() => setActiveTab('inventory')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                                activeTab === 'inventory' 
-                                    ? 'bg-white shadow text-primary-600 font-medium' 
+                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'inventory'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
                                     : 'text-gray-600 hover:text-primary-500'
-                            }`}
+                                }`}
                         >
                             Inventory
                         </button>
@@ -443,11 +406,11 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                                         <div className="space-y-2">
                                             {categoryDistribution.map((category, index) => {
                                                 const categoryItems = inventory.filter(item => item.category === category.name);
-                                                const categoryValue = categoryItems.reduce((sum, item) => 
+                                                const categoryValue = categoryItems.reduce((sum, item) =>
                                                     sum + ((item.price || 0) * (item.quantity || 0)), 0);
-                                                const percentage = totalInventoryValue > 0 ? 
+                                                const percentage = totalInventoryValue > 0 ?
                                                     (categoryValue / totalInventoryValue) * 100 : 0;
-                                                
+
                                                 return (
                                                     <div key={index}>
                                                         <div className="flex justify-between text-sm mb-1">
@@ -455,8 +418,8 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                                                             <span className="text-gray-600">${categoryValue.toFixed(2)}</span>
                                                         </div>
                                                         <div className="w-full bg-gray-200 rounded-full h-2">
-                                                            <div 
-                                                                className="bg-primary-500 h-2 rounded-full" 
+                                                            <div
+                                                                className="bg-primary-500 h-2 rounded-full"
                                                                 style={{ width: `${percentage}%` }}
                                                             ></div>
                                                         </div>
@@ -468,7 +431,7 @@ export default function Dashboard({ inventory = [], salesData = [] }) {
                                         <p className="text-gray-500 text-sm">No category data available</p>
                                     )}
                                 </div>
-                                
+
                                 {/* Inventory Quick Stats */}
                                 <div className="grid grid-cols-2 gap-4 mt-2">
                                     <div className="bg-blue-50 rounded-lg p-4">
