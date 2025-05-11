@@ -76,11 +76,16 @@ export default function InventoryList({
 
     // Format currency
     const formatCurrency = (value) => {
-        if (typeof value !== 'number' || isNaN(value)) {
-            return '₦0.00';
-        }
-        return `₦${value.toFixed(2)}`;
-    };
+    const amount = Number(value);
+    if (isNaN(amount)) {
+        return '₦0.00';
+    }
+    return new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN',
+        minimumFractionDigits: 2
+    }).format(amount);
+};
 
     // Truncate text with ellipsis
     const truncateText = (text, maxLength = 20) => {
