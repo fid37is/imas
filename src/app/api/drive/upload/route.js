@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { uploadImage } from '../../../lib/uploadService';
+import { uploadImage } from '../../../../lib/googleDriveService';
 
 export async function POST(request) {
     try {

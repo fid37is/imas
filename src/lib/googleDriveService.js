@@ -1,4 +1,4 @@
-import { uploadImageToDrive, saveFileLocally } from './googleDriveService';
+import { uploadImageToDrive } from '../app/utils/clientDriveService';
 
 /**
  * Upload image with fallback handling

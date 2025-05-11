@@ -1,6 +1,6 @@
 // src/app/api/drive/delete/route.js
 import { NextResponse } from 'next/server';
-import { deleteFileFromDrive } from '../../../../lib/googleDriveService';
+import { deleteFileFromDrive } from '../../../utils/clientDriveService';
 
 export async function DELETE(request) {
     try {
