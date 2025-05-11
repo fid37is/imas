@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { Edit, ShoppingCart } from "lucide-react"; // Import icons
+import { Edit, ShoppingCart, Check } from "lucide-react"; // Added Check icon
 
 export default function InventoryList({
     items,
@@ -15,6 +15,9 @@ export default function InventoryList({
     // State for sell modal
     const [sellModalItem, setSellModalItem] = useState(null);
     const [sellQuantity, setSellQuantity] = useState(1);
+    // New state for button loading and success message
+    const [isSellingLoading, setIsSellingLoading] = useState(false);
+    const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
     // Handle selecting all items
     const handleSelectAll = (e) => {
@@ -38,11 +41,37 @@ export default function InventoryList({
     const openSellModal = (item) => {
         setSellModalItem(item);
         setSellQuantity(1);
+        setShowSuccessMessage(false); // Reset success message when opening modal
     };
 
     // Handle edit item - passing the full item object to the parent component
     const handleEditItem = (item) => {
         onEditItem(item);
+    };
+
+    // New function to handle the sell process with loading state
+    const handleCompleteSale = async () => {
+        if (!sellModalItem) return;
+        
+        setIsSellingLoading(true);
+        
+        try {
+            // Complete the sale with the parent component's function
+            await onSellItem(sellModalItem, sellQuantity);
+            
+            // Show success message
+            setShowSuccessMessage(true);
+            
+            // Keep the modal open for a moment to show the success message
+            setTimeout(() => {
+                setSellModalItem(null);
+                setShowSuccessMessage(false);
+            }, 1500);
+        } catch (error) {
+            console.error("Error completing sale:", error);
+        } finally {
+            setIsSellingLoading(false);
+        }
     };
 
     // Format currency
@@ -208,49 +237,67 @@ export default function InventoryList({
                     <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
                         <h2 className="text-lg font-semibold mb-4">Sell Item: {sellModalItem.name}</h2>
                         
-                        <div className="mb-4">
-                            <p className="text-gray-600 mb-2">Available: {sellModalItem.quantity}</p>
-                            <p className="text-gray-600 mb-2">Price: {formatCurrency(sellModalItem.price)}</p>
-                        </div>
-                        
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Quantity to sell:
-                            </label>
-                            <input
-                                type="number"
-                                min="1"
-                                max={sellModalItem.quantity}
-                                value={sellQuantity}
-                                onChange={(e) => setSellQuantity(parseInt(e.target.value) || 1)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            />
-                        </div>
-                        
-                        <div className="mb-4">
-                            <p className="font-medium">
-                                Total: {formatCurrency((sellModalItem.price || 0) * sellQuantity)}
-                            </p>
-                        </div>
+                        {showSuccessMessage ? (
+                            <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md flex items-center">
+                                <Check className="h-5 w-5 mr-2" />
+                                <span>Sale completed successfully!</span>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="mb-4">
+                                    <p className="text-gray-600 mb-2">Available: {sellModalItem.quantity}</p>
+                                    <p className="text-gray-600 mb-2">Price: {formatCurrency(sellModalItem.price)}</p>
+                                </div>
+                                
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Quantity to sell:
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={sellModalItem.quantity}
+                                        value={sellQuantity}
+                                        onChange={(e) => setSellQuantity(parseInt(e.target.value) || 1)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    />
+                                </div>
+                                
+                                <div className="mb-4">
+                                    <p className="font-medium">
+                                        Total: {formatCurrency((sellModalItem.price || 0) * sellQuantity)}
+                                    </p>
+                                </div>
+                            </>
+                        )}
                         
                         <div className="flex justify-end space-x-3">
                             <button
                                 onClick={() => setSellModalItem(null)}
                                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                disabled={isSellingLoading}
                             >
                                 Cancel
                             </button>
-                            <button
-                                onClick={() => {
-                                    onSellItem(sellModalItem, sellQuantity);
-                                    setSellModalItem(null);
-                                }}
-                                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center"
-                                disabled={sellQuantity < 1 || sellQuantity > sellModalItem.quantity}
-                            >
-                                <ShoppingCart className="h-4 w-4 mr-2" />
-                                Complete Sale
-                            </button>
+                            {!showSuccessMessage && (
+                                <button
+                                    onClick={handleCompleteSale}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center"
+                                    disabled={sellQuantity < 1 || sellQuantity > sellModalItem.quantity || isSellingLoading}
+                                >
+                                    {isSellingLoading ? (
+                                        <>
+                                            <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full"></div>
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ShoppingCart className="h-4 w-4 mr-2" />
+                                            Confirm
+                                        </>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -2,9 +2,10 @@
 import { useState, useEffect } from 'react';
 import { generateSKU } from '../utils/skuGenerator';
 import { generateItemId } from '../utils/idGenerator';
-import { Plus, Save } from 'lucide-react';
+import { Plus, Pencil, Loader } from 'lucide-react';
 
 export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = null }) {
+    const [isEditMode, setIsEditMode] = useState(false);
     const [imageFile, setImageFile] = useState(null);
     const [submitError, setSubmitError] = useState('');
     const [formData, setFormData] = useState({
@@ -48,6 +49,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
     // If itemToEdit is provided, populate the form with its data
     useEffect(() => {
         if (itemToEdit) {
+            setIsEditMode(true);
             setFormData({
                 name: itemToEdit.name || '',
                 category: itemToEdit.category || '',
@@ -56,10 +58,10 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                 quantity: itemToEdit.quantity || '',
                 sku: itemToEdit.sku || '',
                 lowStockThreshold: itemToEdit.lowStockThreshold || '',
-                description: itemToEdit.description || ''
             });
             setAutoGenerateSKU(false);
         } else {
+            setIsEditMode(false);
             // Reset form for new item
             setFormData({
                 name: '',
@@ -69,7 +71,6 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                 quantity: '',
                 sku: '',
                 lowStockThreshold: '',
-                description: ''
             });
             setAutoGenerateSKU(true);
         }
@@ -429,8 +430,16 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                             disabled={isSubmitting}
                             className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center gap-2"
                         >
-                            <Save className="h-4 w-4" />
-                            {isSubmitting ? 'Saving...' : 'Save Item'}
+                            {isSubmitting ? (
+                                <Loader className="h-4 w-4 animate-spin" />
+                            ) : isEditMode ? (
+                                <Pencil className="h-4 w-4" />
+                            ) : (
+                                <Plus className="h-4 w-4" />
+                            )}
+                            {isSubmitting
+                                ? isEditMode ? 'Updating...' : 'Adding...'
+                                : isEditMode ? 'Update' : 'Add'}
                         </button>
                     </div>
 

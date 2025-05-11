@@ -153,7 +153,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         try {
             setIsLoading(true);
             // Update in database
-            await updateInventoryItem(updatedItem);
+            await updateInventoryItem(updatedItem.id, updatedItem);
 
             // Update local state
             const updatedInventory = inventory.map(item =>
