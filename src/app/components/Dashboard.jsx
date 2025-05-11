@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { Chart } from "chart.js/auto";
 
-export default function Dashboard({ inventory, salesData }) {
+export default function Dashboard({ inventory = [], salesData = [] }) {
+    // Initialize with default values to prevent undefined errors
     const [totalInventoryValue, setTotalInventoryValue] = useState(0);
     const [totalItems, setTotalItems] = useState(0);
     const [lowStockItems, setLowStockItems] = useState(0);
@@ -34,41 +35,45 @@ export default function Dashboard({ inventory, salesData }) {
     }, [inventory, salesData, activeTab]);
 
     const calculateMetrics = () => {
+        // Handle case where inventory is undefined
+        const safeInventory = inventory || [];
+        const safeSalesData = salesData || [];
+        
         // Calculate total inventory value and count
         let totalValue = 0;
         let lowStock = 0;
 
-        inventory.forEach(item => {
-            totalValue += item.price * item.quantity;
+        safeInventory.forEach(item => {
+            totalValue += (item.price || 0) * (item.quantity || 0);
             if (item.quantity <= item.lowStockThreshold) {
                 lowStock++;
             }
         });
 
         setTotalInventoryValue(totalValue);
-        setTotalItems(inventory.length);
+        setTotalItems(safeInventory.length);
         setLowStockItems(lowStock);
 
         // Calculate sales metrics if data is available
-        if (salesData && salesData.length) {
-            const salesSum = salesData.reduce((sum, sale) => sum + sale.total, 0);
-            const profitSum = salesData.reduce((sum, sale) => sum + sale.profit, 0);
+        if (safeSalesData && safeSalesData.length) {
+            const salesSum = safeSalesData.reduce((sum, sale) => sum + (sale.total || 0), 0);
+            const profitSum = safeSalesData.reduce((sum, sale) => sum + (sale.profit || 0), 0);
 
             setTotalSales(salesSum);
             setProfit(profitSum);
 
             // Calculate top selling items
             const itemSales = {};
-            salesData.forEach(sale => {
+            safeSalesData.forEach(sale => {
                 if (itemSales[sale.itemId]) {
-                    itemSales[sale.itemId].quantity += sale.quantity;
-                    itemSales[sale.itemId].total += sale.total;
+                    itemSales[sale.itemId].quantity += (sale.quantity || 0);
+                    itemSales[sale.itemId].total += (sale.total || 0);
                 } else {
                     itemSales[sale.itemId] = {
                         id: sale.itemId,
-                        name: sale.itemName,
-                        quantity: sale.quantity,
-                        total: sale.total
+                        name: sale.itemName || "Unknown Item",
+                        quantity: sale.quantity || 0,
+                        total: sale.total || 0
                     };
                 }
             });
@@ -82,7 +87,7 @@ export default function Dashboard({ inventory, salesData }) {
 
         // Calculate category distribution
         const categories = {};
-        inventory.forEach(item => {
+        safeInventory.forEach(item => {
             if (item.category) {
                 if (categories[item.category]) {
                     categories[item.category]++;
@@ -113,11 +118,13 @@ export default function Dashboard({ inventory, salesData }) {
             // Group sales by date
             const salesByDate = {};
             salesData.forEach(sale => {
+                if (!sale.date) return;
+                
                 const date = new Date(sale.date).toLocaleDateString();
                 if (salesByDate[date]) {
-                    salesByDate[date] += sale.total;
+                    salesByDate[date] += (sale.total || 0);
                 } else {
-                    salesByDate[date] = sale.total;
+                    salesByDate[date] = (sale.total || 0);
                 }
             });
 
@@ -247,7 +254,7 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Inventory Value</h3>
-                        <p className="text-xl font-bold text-primary-600">${totalInventoryValue.toFixed(2)}</p>
+                        <p className="text-xl font-bold text-primary-600">${(totalInventoryValue || 0).toFixed(2)}</p>
                         <p className="text-sm text-gray-500 mt-1">{totalItems} items in stock</p>
                     </div>
                 </div>
@@ -260,8 +267,9 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Sales</h3>
-                        <p className="text-xl font-bold text-primary-600">${totalSales.toFixed(2)}</p>
-                        <p className="text-sm text-gray-500 mt-1">{salesData?.length || 0} transactions</p>
+                        {/* Fix for the error - ensure totalSales is always defined before using toFixed */}
+                        <p className="text-xl font-bold text-primary-600">${(totalSales || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-500 mt-1">{(salesData && salesData.length) || 0} transactions</p>
                     </div>
                 </div>
 
@@ -273,7 +281,8 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Profit</h3>
-                        <p className="text-xl font-bold text-accent-600">${profit.toFixed(2)}</p>
+                        {/* Fix potential undefined error here too */}
+                        <p className="text-xl font-bold text-accent-600">${(profit || 0).toFixed(2)}</p>
                         <p className="text-sm text-gray-500 mt-1">From all sales</p>
                     </div>
                 </div>
@@ -307,7 +316,13 @@ export default function Dashboard({ inventory, salesData }) {
                         </div>
                         <div className="p-4">
                             <div className="h-64">
-                                <canvas id="salesChart"></canvas>
+                                {salesData && salesData.length > 0 ? (
+                                    <canvas id="salesChart"></canvas>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full">
+                                        <p className="text-gray-500">No sales data available</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -319,7 +334,13 @@ export default function Dashboard({ inventory, salesData }) {
                         </div>
                         <div className="p-4">
                             <div className="h-64">
-                                <canvas id="categoryChart"></canvas>
+                                {categoryDistribution && categoryDistribution.length > 0 ? (
+                                    <canvas id="categoryChart"></canvas>
+                                ) : (
+                                    <div className="flex items-center justify-center h-full">
+                                        <p className="text-gray-500">No category data available</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -332,7 +353,7 @@ export default function Dashboard({ inventory, salesData }) {
                     <div className="px-4 py-3 border-b border-gray-200">
                         <h3 className="text-lg font-medium text-primary-600">Top Selling Items</h3>
                     </div>
-                    {topSellingItems.length > 0 ? (
+                    {topSellingItems && topSellingItems.length > 0 ? (
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-primary-50">
@@ -345,9 +366,10 @@ export default function Dashboard({ inventory, salesData }) {
                                 <tbody className="bg-white divide-y divide-gray-200">
                                     {topSellingItems.map((item) => (
                                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.total.toFixed(2)}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity || 0}</td>
+                                            {/* Fix for line 761 error - Make sure item.total is defined */}
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${(item.total || 0).toFixed(2)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -373,7 +395,7 @@ export default function Dashboard({ inventory, salesData }) {
                         <div className="px-4 py-3 border-b border-gray-200">
                             <h3 className="text-lg font-medium text-primary-600">Low Stock Items</h3>
                         </div>
-                        {lowStockItems > 0 ? (
+                        {inventory && lowStockItems > 0 ? (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-primary-50">
@@ -388,9 +410,9 @@ export default function Dashboard({ inventory, salesData }) {
                                             .filter(item => item.quantity <= item.lowStockThreshold)
                                             .map((item) => (
                                                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-red-500 font-medium">{item.quantity}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.lowStockThreshold}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-red-500 font-medium">{item.quantity || 0}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.lowStockThreshold || 0}</td>
                                                 </tr>
                                             ))}
                                     </tbody>
@@ -417,12 +439,14 @@ export default function Dashboard({ inventory, salesData }) {
                                 {/* Inventory Value by Category */}
                                 <div>
                                     <h4 className="text-sm font-medium text-gray-700 mb-2">Value by Category</h4>
-                                    {categoryDistribution.length > 0 ? (
+                                    {categoryDistribution && categoryDistribution.length > 0 ? (
                                         <div className="space-y-2">
                                             {categoryDistribution.map((category, index) => {
                                                 const categoryItems = inventory.filter(item => item.category === category.name);
-                                                const categoryValue = categoryItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                                                const percentage = (categoryValue / totalInventoryValue) * 100;
+                                                const categoryValue = categoryItems.reduce((sum, item) => 
+                                                    sum + ((item.price || 0) * (item.quantity || 0)), 0);
+                                                const percentage = totalInventoryValue > 0 ? 
+                                                    (categoryValue / totalInventoryValue) * 100 : 0;
                                                 
                                                 return (
                                                     <div key={index}>
@@ -456,7 +480,7 @@ export default function Dashboard({ inventory, salesData }) {
                                     <div className="bg-purple-50 rounded-lg p-4">
                                         <h4 className="text-sm font-medium text-purple-700">Total Categories</h4>
                                         <p className="text-xl font-bold text-purple-800 mt-1">
-                                            {categoryDistribution.length}
+                                            {categoryDistribution ? categoryDistribution.length : 0}
                                         </p>
                                     </div>
                                 </div>

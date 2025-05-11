@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { generateSKU } from '../utils/skuGenerator';
 import { generateItemId } from '../utils/idGenerator';
-import { Plus } from 'lucide-react';
+import { Plus, Save } from 'lucide-react';
 
 export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = null }) {
     const [imageFile, setImageFile] = useState(null);
@@ -223,13 +223,13 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
     return (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 p-4" onClick={onClose}>
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto" onClick={handleModalClick}>
-                <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
-                    <h3 className="text-lg font-medium text-primary-600">
-                        {itemToEdit ? 'Edit Item' : 'Add New Item'}
+                <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-primary-700 text-white">
+                    <h3 className="text-lg font-medium">
+                        {itemToEdit ? `Edit Item: ${itemToEdit.name}` : 'Add New Item'}
                     </h3>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-500"
+                        className="text-white hover:text-gray-200"
                         aria-label="Close"
                     >
                         <svg className="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -387,9 +387,9 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         </div>
 
                         <div>
-                            {/* <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
+                            <label htmlFor="image" className="block text-xs font-medium text-gray-500 mb-1">
                                 Product Image
-                            </label> */}
+                            </label>
                             <input
                                 type="file"
                                 id="image"
@@ -409,7 +409,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     <img
                                         src={itemToEdit.imageUrl}
                                         alt={itemToEdit.name}
-                                        className="h-20 w-20 object-cover mt-1"
+                                        className="h-20 w-20 object-cover mt-1 rounded-md border border-gray-200"
                                     />
                                 </div>
                             )}
@@ -427,18 +427,13 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2" // Added flex and space-x-2 for icon alignment
+                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center gap-2"
                         >
-                            {isSubmitting ? (
-                                'Saving...'
-                            ) : (
-                                <>
-                                    {itemToEdit ? 'Update Item' : <Plus className="h-4 w-4" />} 
-                                    {itemToEdit ? '' : 'Add'} 
-                                </>
-                            )}
+                            <Save className="h-4 w-4" />
+                            {isSubmitting ? 'Saving...' : 'Save Item'}
                         </button>
                     </div>
+
                 </form>
             </div>
         </div>
