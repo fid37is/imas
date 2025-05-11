@@ -179,8 +179,8 @@ export default function Dashboard({ inventory, salesData }) {
                         <button
                             onClick={() => setActiveTab('overview')}
                             className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'overview'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
+                                ? 'bg-white shadow text-primary-600 font-medium'
+                                : 'text-gray-600 hover:text-primary-500'
                                 }`}
                         >
                             Overview
@@ -188,8 +188,8 @@ export default function Dashboard({ inventory, salesData }) {
                         <button
                             onClick={() => setActiveTab('sales')}
                             className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'sales'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
+                                ? 'bg-white shadow text-primary-600 font-medium'
+                                : 'text-gray-600 hover:text-primary-500'
                                 }`}
                         >
                             Sales
@@ -197,8 +197,8 @@ export default function Dashboard({ inventory, salesData }) {
                         <button
                             onClick={() => setActiveTab('inventory')}
                             className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'inventory'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
+                                ? 'bg-white shadow text-primary-600 font-medium'
+                                : 'text-gray-600 hover:text-primary-500'
                                 }`}
                         >
                             Inventory
@@ -217,7 +217,7 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Inventory Value</h3>
-                        <p className="text-xl font-bold text-primary-600">${(totalInventoryValue || 0).toFixed(2)}</p>
+                        <p className="text-xl font-bold text-primary-600">{formatCurrency(totalInventoryValue)}</p>
                         <p className="text-sm text-gray-500 mt-1">{totalItems} items in stock</p>
                     </div>
                 </div>
@@ -231,7 +231,7 @@ export default function Dashboard({ inventory, salesData }) {
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Sales</h3>
                         {/* Fix for the error - ensure totalSales is always defined before using toFixed */}
-                        <p className="text-xl font-bold text-primary-600">${(totalSales || 0).toFixed(2)}</p>
+                        <p className="text-xl font-bold text-primary-600">{formatCurrency(totalSales)}</p>
                         <p className="text-sm text-gray-500 mt-1">{(salesData && salesData.length) || 0} transactions</p>
                     </div>
                 </div>
@@ -245,7 +245,7 @@ export default function Dashboard({ inventory, salesData }) {
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Profit</h3>
                         {/* Fix potential undefined error here too */}
-                        <p className="text-xl font-bold text-accent-600">${(profit || 0).toFixed(2)}</p>
+                        <p className="text-xl font-bold text-accent-600">{formatCurrency(profit)}</p>
                         <p className="text-sm text-gray-500 mt-1">From all sales</p>
                     </div>
                 </div>
@@ -332,7 +332,7 @@ export default function Dashboard({ inventory, salesData }) {
                                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity || 0}</td>
                                             {/* Fix for line 761 error - Make sure item.total is defined */}
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${(item.total || 0).toFixed(2)}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.total)}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -437,7 +437,7 @@ export default function Dashboard({ inventory, salesData }) {
                                     <div className="bg-blue-50 rounded-lg p-4">
                                         <h4 className="text-sm font-medium text-blue-700">Avg. Item Value</h4>
                                         <p className="text-xl font-bold text-blue-800 mt-1">
-                                            ${totalItems > 0 ? (totalInventoryValue / totalItems).toFixed(2) : '0.00'}
+                                            {totalItems > 0 ? formatCurrency(totalInventoryValue / totalItems) : formatCurrency(0)}
                                         </p>
                                     </div>
                                     <div className="bg-purple-50 rounded-lg p-4">
