@@ -105,6 +105,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     const [sortDirection, setSortDirection] = useState('asc'); // asc, desc
     const [isFilterExpanded, setIsFilterExpanded] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [editingItem, setEditingItem] = useState(null);
 
     // Alert and confirmation state
     const [alert, setAlert] = useState({ message: '', type: 'info', isOpen: false });
@@ -160,6 +161,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
             );
 
             setInventory(updatedInventory);
+            setEditingItem(null);
             showAlert(`Item "${updatedItem.name}" updated successfully`, 'success');
         } catch (error) {
             console.error("Error updating item:", error);
@@ -167,6 +169,12 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Handle editing an item - opens the modal with the item data
+    const handleEditItem = (item) => {
+        setEditingItem(item);
+        setIsAddModalOpen(true);
     };
 
     // Handle deleting an item
@@ -187,6 +195,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
 
                     // Update local state
                     setInventory(inventory.filter(item => item.id !== itemId));
+                    setSelectedItems(selectedItems.filter(id => id !== itemId));
                     showAlert(`Item deleted successfully`, 'success');
                 } catch (error) {
                     console.error("Error deleting item:", error);
@@ -232,8 +241,8 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
 
     // Filter inventory based on search and category
     const filteredInventory = inventory.filter(item => {
-        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = (item.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+            (item.sku?.toLowerCase() || '').includes(searchTerm.toLowerCase());
         const matchesCategory = filterCategory === '' || item.category === filterCategory;
 
         return matchesSearch && matchesCategory;
@@ -244,11 +253,11 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         let comparison = 0;
 
         if (sortBy === 'name') {
-            comparison = a.name.localeCompare(b.name);
+            comparison = (a.name || '').localeCompare(b.name || '');
         } else if (sortBy === 'price') {
-            comparison = a.price - b.price;
+            comparison = (a.price || 0) - (b.price || 0);
         } else if (sortBy === 'quantity') {
-            comparison = a.quantity - b.quantity;
+            comparison = (a.quantity || 0) - (b.quantity || 0);
         }
 
         return sortDirection === 'asc' ? comparison : -comparison;
@@ -257,6 +266,12 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
     // Toggle filter panel on mobile
     const toggleFilterPanel = () => {
         setIsFilterExpanded(!isFilterExpanded);
+    };
+
+    // Handler for closing the modal and resetting editing state
+    const handleCloseModal = () => {
+        setIsAddModalOpen(false);
+        setEditingItem(null);
     };
 
     return (
@@ -284,7 +299,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="bg-primary-700 hover:bg-primary-500 text-[#fff] font-medium px-4 py-2 rounded transition-colors"
+                        className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-4 py-2 rounded transition-colors"
                         disabled={isLoading}
                     >
                         + New Item
@@ -406,14 +421,17 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                     onUpdateItem={handleUpdateItem}
                     onDeleteItem={handleDeleteItem}
                     onSellItem={onSellItem}
+                    onEditItem={handleEditItem}
                 />
             )}
 
             {isAddModalOpen && (
                 <AddItemModal
                     isOpen={isAddModalOpen}
-                    onClose={() => setIsAddModalOpen(false)}
-                    onSave={handleAddItem}
+                    onClose={handleCloseModal}
+                    onSave={editingItem ? handleUpdateItem : handleAddItem}
+                    item={editingItem || null}
+                    isEditing={!!editingItem}
                 />
             )}
         </div>
