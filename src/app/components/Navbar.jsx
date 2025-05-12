@@ -1,6 +1,7 @@
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 
 export default function Navbar({ activeView, setActiveView, user }) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -21,9 +22,9 @@ export default function Navbar({ activeView, setActiveView, user }) {
                     <div className="flex items-center">
                         <div className="flex-shrink-0 flex items-center">
                             {/* Logo Placeholder */}
-                            <img 
-                                src="/img/skeepr.png" 
-                                alt="Company Logo" 
+                            <img
+                                src="/img/skeepr.png"
+                                alt="Company Logo"
                                 className="h-10 w-30 mr-3"
                             />
                             <span className="ml-2 text-sm text-gray-300 hidden sm:block">
@@ -31,46 +32,44 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             </span>
                         </div>
                     </div>
-                    
+
                     {/* Navigation buttons - middle (hidden on mobile) */}
                     <div className="hidden sm:ml-6 sm:flex sm:items-center">
                         <div className="flex space-x-4">
-                            <button 
+                            <button
                                 onClick={() => setActiveView("inventory")}
-                                className={`px-4 py-2 transition-colors text-white ${
-                                    activeView === "inventory"
-                                        ? "font-medium border-b-2 border-white"
-                                        : "hover:text-gray-300"
-                                }`}
+                                className={`px-4 py-2 transition-colors text-white ${activeView === "inventory"
+                                    ? "font-medium border-b-2 border-white"
+                                    : "hover:text-gray-300"
+                                    }`}
                             >
                                 Inventory
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setActiveView("dashboard")}
-                                className={`px-4 py-2 transition-colors text-white ${
-                                    activeView === "dashboard"
-                                        ? "font-medium border-b-2 border-white"
-                                        : "hover:text-gray-300"
-                                }`}
+                                className={`px-4 py-2 transition-colors text-white ${activeView === "dashboard"
+                                    ? "font-medium border-b-2 border-white"
+                                    : "hover:text-gray-300"
+                                    }`}
                             >
                                 Dashboard
                             </button>
                         </div>
                     </div>
-                    
+
                     {/* User and logout (hidden on mobile) */}
                     <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
                         <span className="text-sm text-gray-200">
                             {user.email}
                         </span>
-                        <button 
+                        <button
                             onClick={handleLogout}
                             className="text-sm text-red-400 hover:text-red-300"
                         >
-                            Logout
+                            <LogOut />
                         </button>
                     </div>
-                    
+
                     {/* Mobile menu button */}
                     <div className="flex items-center sm:hidden">
                         <button
@@ -123,11 +122,10 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             setActiveView("inventory");
                             setMobileMenuOpen(false);
                         }}
-                        className={`block w-full text-left px-3 py-2 text-base font-medium ${
-                            activeView === "inventory"
-                                ? "bg-blue-800 text-white"
-                                : "text-gray-200 hover:bg-blue-800 hover:text-white"
-                        }`}
+                        className={`block w-full text-left px-3 py-2 text-base font-medium ${activeView === "inventory"
+                            ? "bg-blue-800 text-white"
+                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                            }`}
                     >
                         Inventory
                     </button>
@@ -136,11 +134,10 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             setActiveView("dashboard");
                             setMobileMenuOpen(false);
                         }}
-                        className={`block w-full text-left px-3 py-2 text-base font-medium ${
-                            activeView === "dashboard"
-                                ? "bg-blue-800 text-white"
-                                : "text-gray-200 hover:bg-blue-800 hover:text-white"
-                        }`}
+                        className={`block w-full text-left px-3 py-2 text-base font-medium ${activeView === "dashboard"
+                            ? "bg-blue-800 text-white"
+                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                            }`}
                     >
                         Dashboard
                     </button>
@@ -154,7 +151,7 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             onClick={handleLogout}
                             className="ml-auto flex-shrink-0 bg-blue-900 p-1 text-red-400 hover:text-red-300"
                         >
-                            Logout
+                            <LogOut />
                         </button>
                     </div>
                 </div>
