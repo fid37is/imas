@@ -42,6 +42,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
         'Screen Protectors',
         'Selfie Stick',
         'Smart Watches',
+        'Storage Devices',
         
     ];
 
