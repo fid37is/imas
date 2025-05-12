@@ -1,6 +1,5 @@
-// src/app/api/drive/delete/route.js
 import { NextResponse } from 'next/server';
-import { deleteFileFromDrive } from '../../../utils/clientDriveService';
+import { deleteImage } from '../../../../lib/googleDriveService';
 
 export async function DELETE(request) {
     try {
@@ -13,13 +12,19 @@ export async function DELETE(request) {
             );
         }
 
-        await deleteFileFromDrive(fileUrl);
+        await deleteImage(fileUrl);
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            message: 'File deleted successfully'
+        });
     } catch (error) {
         console.error('Error in delete API route:', error);
         return NextResponse.json(
-            { error: error.message || 'Failed to delete file' },
+            {
+                success: false,
+                error: error.message || 'Failed to delete file'
+            },
             { status: 500 }
         );
     }

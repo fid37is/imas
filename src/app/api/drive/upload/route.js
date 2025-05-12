@@ -13,11 +13,13 @@ export async function POST(request) {
             );
         }
 
+        console.log('Received file for upload:', file.name);
+
         // Prepare file for upload
         const fileObject = {
             name: file.name,
             type: file.type,
-            stream: file.stream(),
+            stream: () => file.stream(),
             arrayBuffer: async () => await file.arrayBuffer()
         };
 
