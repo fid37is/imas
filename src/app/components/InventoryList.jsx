@@ -76,16 +76,16 @@ export default function InventoryList({
 
     // Format currency
     const formatCurrency = (value) => {
-    const amount = Number(value);
-    if (isNaN(amount)) {
-        return '₦0.00';
-    }
-    return new Intl.NumberFormat('en-NG', {
-        style: 'currency',
-        currency: 'NGN',
-        minimumFractionDigits: 2
-    }).format(amount);
-};
+        const amount = Number(value);
+        if (isNaN(amount)) {
+            return '₦0.00';
+        }
+        return new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: 'NGN',
+            minimumFractionDigits: 2
+        }).format(amount);
+    };
 
     // Truncate text with ellipsis
     const truncateText = (text, maxLength = 20) => {
@@ -94,11 +94,30 @@ export default function InventoryList({
         return text.substring(0, maxLength) + '...';
     };
 
-    // Check if item is low on stock
+    // Check if item is low on stock - FIXED to properly handle empty thresholds
     const isLowStock = (item) => {
         const quantity = parseInt(item.quantity) || 0;
-        const threshold = parseInt(item.lowStockThreshold) || 5;
-        return quantity <= threshold;
+        
+        // Only check for low stock if threshold exists and is not empty
+        if (item.lowStockThreshold !== null && 
+            item.lowStockThreshold !== undefined && 
+            item.lowStockThreshold !== '' && 
+            item.lowStockThreshold !== 0) {
+            
+            const threshold = parseInt(item.lowStockThreshold);
+            return !isNaN(threshold) && quantity <= threshold;
+        }
+        return false; // If no threshold is specified or it's empty, it's not low on stock
+    };
+
+    // Helper function to display threshold value - ADDED
+    const displayThreshold = (threshold) => {
+        // If threshold is explicitly empty, null, or undefined, show a dash
+        if (threshold === null || threshold === undefined || threshold === '') {
+            return 'N/A';
+        }
+        // Otherwise show the actual threshold
+        return threshold;
     };
 
     return (
@@ -208,7 +227,7 @@ export default function InventoryList({
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="text-sm text-gray-900">
-                                            {item.lowStockThreshold || 5}
+                                            {displayThreshold(item.lowStockThreshold)}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
@@ -236,41 +255,45 @@ export default function InventoryList({
                 </div>
             )}
 
-            {/* Sell Item Modal */}
+            {/* Sell Modal */}
             {sellModalItem && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-                        <h2 className="text-lg font-semibold mb-4">Sell Item: {sellModalItem.name}</h2>
+                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                        <h3 className="text-xl font-semibold mb-4">Sell Item</h3>
+                        <div className="mb-4">
+                            <p className="font-medium text-gray-700">{sellModalItem.name}</p>
+                            <p className="text-sm text-gray-500">
+                                Available: {sellModalItem.quantity} units
+                            </p>
+                            <p className="text-sm font-medium text-gray-700 mt-2">
+                                Price: {formatCurrency(sellModalItem.price)}
+                            </p>
+                        </div>
 
                         {showSuccessMessage ? (
-                            <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-md flex items-center">
-                                <Check className="h-5 w-5 mr-2" />
-                                <span>Sale completed successfully!</span>
+                            <div className="flex items-center justify-center py-6 text-green-600">
+                                <Check className="w-6 h-6 mr-2" />
+                                <span className="font-medium">Sale completed successfully!</span>
                             </div>
                         ) : (
                             <>
                                 <div className="mb-4">
-                                    <p className="text-gray-600 mb-2">Available: {sellModalItem.quantity}</p>
-                                    <p className="text-gray-600 mb-2">Price: {formatCurrency(sellModalItem.price)}</p>
-                                </div>
-
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Quantity to sell:
+                                    <label htmlFor="sellQuantity" className="block text-sm font-medium text-gray-700 mb-1">
+                                        Quantity to sell
                                     </label>
                                     <input
                                         type="number"
+                                        id="sellQuantity"
                                         min="1"
                                         max={sellModalItem.quantity}
                                         value={sellQuantity}
                                         onChange={(e) => setSellQuantity(parseInt(e.target.value) || 1)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full p-2 border border-gray-300 rounded-md"
                                     />
                                 </div>
-
                                 <div className="mb-4">
-                                    <p className="font-medium">
-                                        Total: {formatCurrency((sellModalItem.price || 0) * sellQuantity)}
+                                    <p className="text-sm font-medium text-gray-700">
+                                        Total: {formatCurrency(sellModalItem.price * sellQuantity)}
                                     </p>
                                 </div>
                             </>
@@ -279,28 +302,19 @@ export default function InventoryList({
                         <div className="flex justify-end space-x-3">
                             <button
                                 onClick={() => setSellModalItem(null)}
-                                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                                disabled={isSellingLoading}
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
                             >
-                                Cancel
+                                {showSuccessMessage ? 'Close' : 'Cancel'}
                             </button>
+
                             {!showSuccessMessage && (
                                 <button
                                     onClick={handleCompleteSale}
-                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 flex items-center"
-                                    disabled={sellQuantity < 1 || sellQuantity > sellModalItem.quantity || isSellingLoading}
+                                    disabled={isSellingLoading}
+                                    className={`px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center ${isSellingLoading ? 'opacity-75 cursor-not-allowed' : ''
+                                        }`}
                                 >
-                                    {isSellingLoading ? (
-                                        <>
-                                            <div className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full"></div>
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ShoppingCart className="h-4 w-4 mr-2" />
-                                            Confirm
-                                        </>
-                                    )}
+                                    {isSellingLoading ? 'Processing...' : 'Complete Sale'}
                                 </button>
                             )}
                         </div>

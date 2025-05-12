@@ -8,7 +8,10 @@ const INVENTORY_SHEET_RANGE = 'Inventory!A:Z';
 const SALES_SHEET_RANGE = 'Sales!A:Z';
 
 // Helper function to safely parse numbers
-const safeParseInt = (value, defaultValue = 0) => {
+const safeParseInt = (value, defaultValue = null) => {
+    if (value === null || value === undefined || value === '') {
+        return defaultValue;
+    }
     const parsed = parseInt(value);
     return isNaN(parsed) ? defaultValue : parsed;
 };
@@ -51,10 +54,14 @@ export const addInventoryItem = async (item) => {
             (inventoryItem.price || 0).toString(),
             (inventoryItem.costPrice || 0).toString(),
             inventoryItem.sku || '',
-            (inventoryItem.lowStockThreshold || 5).toString(),
+            // Store empty string if threshold is undefined/null/empty
+            (inventoryItem.lowStockThreshold !== undefined &&
+                inventoryItem.lowStockThreshold !== null &&
+                inventoryItem.lowStockThreshold !== '')
+                ? inventoryItem.lowStockThreshold.toString()
+                : '',
             inventoryItem.imageUrl || '',
             inventoryItem.createdAt,
-            inventoryItem.description || ''     // Add description field
         ];
 
         await addRowToSheet(INVENTORY_SHEET_RANGE, rowValues);
@@ -70,7 +77,7 @@ export const addInventoryItem = async (item) => {
 export const getInventory = async () => {
     try {
         const rows = await getRowsFromSheet(INVENTORY_SHEET_RANGE);
-        
+
         if (!rows || rows.length === 0) {
             return [];
         }
@@ -80,7 +87,7 @@ export const getInventory = async () => {
         const items = rows.slice(1).map((row) => {
             // Ensure row is an array
             const safeRow = Array.isArray(row) ? row : [];
-            
+
             return {
                 id: safeRow[0] || '',           // Use the ID from the sheet
                 name: safeRow[1] || '',
@@ -89,10 +96,10 @@ export const getInventory = async () => {
                 price: safeParseFloat(safeRow[4], 0),
                 costPrice: safeParseFloat(safeRow[5], 0),
                 sku: safeRow[6] || '',
-                lowStockThreshold: safeParseInt(safeRow[7], 5),
+                // Don't set a default value for lowStockThreshold
+                lowStockThreshold: safeParseInt(safeRow[7], null),
                 imageUrl: safeRow[8] || '',
                 createdAt: safeRow[9] || new Date().toISOString(),
-                description: safeRow[10] || ''   // Add description field
             };
         });
 
@@ -107,7 +114,7 @@ export const getInventory = async () => {
 export const findItemRowIndexById = async (itemId) => {
     try {
         const rows = await getRowsFromSheet(INVENTORY_SHEET_RANGE);
-        
+
         if (!rows || rows.length <= 1) {
             throw new Error('Item not found');
         }
@@ -116,10 +123,10 @@ export const findItemRowIndexById = async (itemId) => {
         const rowIndex = rows.findIndex((row, index) => {
             // Skip header row
             if (index === 0) return false;
-            
+
             // Ensure row is an array
             const safeRow = Array.isArray(row) ? row : [];
-            
+
             return safeRow[0] === itemId;
         });
 
@@ -173,10 +180,14 @@ export const updateInventoryItem = async (itemId, updatedItem) => {
             (updatedItem.price || 0).toString(),
             (updatedItem.costPrice || 0).toString(),
             updatedItem.sku || '',
-            (updatedItem.lowStockThreshold || 5).toString(),
+            // Preserve empty threshold value if user intends it to be empty
+            (updatedItem.lowStockThreshold !== undefined &&
+                updatedItem.lowStockThreshold !== null &&
+                updatedItem.lowStockThreshold !== '')
+                ? updatedItem.lowStockThreshold.toString()
+                : '',
             imageUrl || '',
             updatedItem.createdAt || new Date().toISOString(),
-            updatedItem.description || ''     // Include description field
         ];
 
         // Update in sheet (rowIndex is 0-based, but sheet rows are 1-based)
@@ -199,11 +210,11 @@ export const deleteInventoryItem = async (itemId) => {
         // Find the item first to get its data
         const inventory = await getInventory();
         const item = inventory.find(i => i.id === itemId);
-        
+
         if (!item) {
             throw new Error(`Item with ID ${itemId} not found`);
         }
-        
+
         // Find the row index of the item by ID
         const rowIndex = await findItemRowIndexById(itemId);
 
@@ -288,7 +299,7 @@ export const recordSale = async (item, quantity) => {
 export const getSales = async () => {
     try {
         const rows = await getRowsFromSheet(SALES_SHEET_RANGE);
-        
+
         if (!rows || rows.length === 0) {
             return [];
         }
@@ -297,7 +308,7 @@ export const getSales = async () => {
         const sales = rows.slice(1).map((row, index) => {
             // Ensure row is an array
             const safeRow = Array.isArray(row) ? row : [];
-            
+
             return {
                 id: index.toString(),
                 timestamp: safeRow[0] || '',

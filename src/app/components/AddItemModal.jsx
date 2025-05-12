@@ -15,7 +15,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
         costPrice: '', // Added cost price
         quantity: '',
         sku: '',
-        lowStockThreshold: '',
+        lowStockThreshold: '', // This will remain optional
         description: ''
     });
 
@@ -157,8 +157,10 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
             newErrors.sku = 'SKU is required';
         }
 
-        if (!formData.lowStockThreshold || isNaN(Number(formData.lowStockThreshold)) || Number(formData.lowStockThreshold) < 0) {
-            newErrors.lowStockThreshold = 'Valid low stock threshold is required';
+        // Modified validation - low stock threshold is optional but must be a valid number if provided
+        if (formData.lowStockThreshold !== '' && 
+            (isNaN(Number(formData.lowStockThreshold)) || Number(formData.lowStockThreshold) < 0)) {
+            newErrors.lowStockThreshold = 'If provided, low stock threshold must be a valid number';
         }
 
         setErrors(newErrors);
@@ -180,7 +182,9 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                     price: parseFloat(formData.price),
                     costPrice: parseFloat(formData.costPrice),
                     quantity: parseInt(formData.quantity),
-                    lowStockThreshold: parseInt(formData.lowStockThreshold),
+                    // Only parse if there's a value, otherwise keep as empty string
+                    lowStockThreshold: formData.lowStockThreshold !== '' ? 
+                        parseInt(formData.lowStockThreshold) : '',
                     image: imageFile
                 };
 
@@ -344,7 +348,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
 
                             <div>
                                 <label htmlFor="lowStockThreshold" className="block text-xs font-medium text-gray-500 mb-1">
-                                    Low Stock Threshold *
+                                    Low Stock Threshold (Optional)
                                 </label>
                                 <input
                                     type="number"
@@ -353,6 +357,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.lowStockThreshold}
                                     onChange={handleChange}
                                     min="0"
+                                    placeholder="Leave blank if not needed"
                                     className={`w-full px-3 py-2 text-sm font-medium border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
