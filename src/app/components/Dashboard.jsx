@@ -17,9 +17,42 @@ export default function Dashboard({ inventory, salesData }) {
     const [topSellingItems, setTopSellingItems] = useState([]);
     const [categoryDistribution, setCategoryDistribution] = useState([]);
     const [activeTab, setActiveTab] = useState('overview');
+    const [dateFilter, setDateFilter] = useState('all');
+    const [filteredSalesData, setFilteredSalesData] = useState([]);
 
+    // Store active tab in localStorage to persist across refreshes
     useEffect(() => {
+        // Retrieve active tab from localStorage if available
+        const savedTab = localStorage.getItem('dashboardActiveTab');
+        if (savedTab) {
+            setActiveTab(savedTab);
+        }
+
+        // Retrieve date filter from localStorage if available
+        const savedDateFilter = localStorage.getItem('dashboardDateFilter');
+        if (savedDateFilter) {
+            setDateFilter(savedDateFilter);
+        }
+    }, []);
+
+    // Save active tab to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem('dashboardActiveTab', activeTab);
+    }, [activeTab]);
+
+    // Save date filter to localStorage whenever it changes
+    useEffect(() => {
+        localStorage.setItem('dashboardDateFilter', dateFilter);
+    }, [dateFilter]);
+
+    // Real-time updates: Add event listener for inventory changes
+    useEffect(() => {
+        // This will recalculate metrics whenever inventory changes
         calculateMetrics();
+
+        // Apply date filter to sales data
+        applyDateFilter();
+
         const timeout = setTimeout(() => {
             createCharts();
         }, 100);
@@ -31,7 +64,46 @@ export default function Dashboard({ inventory, salesData }) {
                 Object.keys(charts).forEach(key => charts[key].destroy());
             }
         };
-    }, [inventory, salesData, activeTab]);
+    }, [inventory, salesData, activeTab, dateFilter]);
+
+    const applyDateFilter = () => {
+        const salesArray = Array.isArray(salesData) ? salesData : [];
+
+        if (dateFilter === 'all') {
+            setFilteredSalesData(salesArray);
+            return;
+        }
+
+        const now = new Date();
+        let startDate;
+
+        switch (dateFilter) {
+            case 'today':
+                startDate = new Date(now.setHours(0, 0, 0, 0));
+                break;
+            case 'week':
+                startDate = new Date(now.setDate(now.getDate() - 7));
+                break;
+            case 'month':
+                startDate = new Date(now.setMonth(now.getMonth() - 1));
+                break;
+            case 'quarter':
+                startDate = new Date(now.setMonth(now.getMonth() - 3));
+                break;
+            case 'year':
+                startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+                break;
+            default:
+                startDate = new Date(0); // Beginning of time
+        }
+
+        const filtered = salesArray.filter(sale => {
+            const saleDate = new Date(sale.timestamp || sale.date);
+            return saleDate >= startDate;
+        });
+
+        setFilteredSalesData(filtered);
+    };
 
     const calculateMetrics = () => {
         const inventoryArray = Array.isArray(inventory) ? inventory : [];
@@ -49,7 +121,8 @@ export default function Dashboard({ inventory, salesData }) {
         setTotalItems(inventoryArray.length);
         setLowStockItems(lowStock);
 
-        const salesArray = Array.isArray(salesData) ? salesData : [];
+        // Use the filtered sales data for calculations
+        const salesArray = filteredSalesData.length > 0 ? filteredSalesData : (Array.isArray(salesData) ? salesData : []);
 
         let salesSum = 0;
         let profitSum = 0;
@@ -93,10 +166,24 @@ export default function Dashboard({ inventory, salesData }) {
     };
 
     const createCharts = () => {
-        const salesArray = Array.isArray(salesData) ? salesData : [];
+        const salesArray = filteredSalesData.length > 0 ? filteredSalesData : [];
+
+        // Clear existing charts first
+        if (typeof window !== 'undefined') {
+            if (document.getElementById('salesChart')) {
+                const ctx = document.getElementById('salesChart').getContext('2d');
+                if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
+            }
+
+            if (document.getElementById('categoryChart')) {
+                const ctx = document.getElementById('categoryChart').getContext('2d');
+                if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
+            }
+        }
+
+        // Only create sales chart if there's data
         if (salesArray.length > 0 && document.getElementById('salesChart')) {
             const ctx = document.getElementById('salesChart').getContext('2d');
-            if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
 
             const salesByDate = {};
             salesArray.forEach(sale => {
@@ -135,7 +222,6 @@ export default function Dashboard({ inventory, salesData }) {
 
         if (categoryDistribution.length && document.getElementById('categoryChart')) {
             const ctx = document.getElementById('categoryChart').getContext('2d');
-            if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
 
             new Chart(ctx, {
                 type: 'pie',
@@ -173,39 +259,65 @@ export default function Dashboard({ inventory, salesData }) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Dashboard</h1>
 
-                {/* Tab navigation */}
-                <div className="w-full sm:w-auto">
-                    <div className="flex bg-gray-100 p-1 rounded-md shadow-sm">
-                        <button
-                            onClick={() => setActiveTab('overview')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'overview'
-                                ? 'bg-white shadow text-primary-600 font-medium'
-                                : 'text-gray-600 hover:text-primary-500'
-                                }`}
-                        >
-                            Overview
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('sales')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'sales'
-                                ? 'bg-white shadow text-primary-600 font-medium'
-                                : 'text-gray-600 hover:text-primary-500'
-                                }`}
-                        >
-                            Sales
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('inventory')}
-                            className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'inventory'
-                                ? 'bg-white shadow text-primary-600 font-medium'
-                                : 'text-gray-600 hover:text-primary-500'
-                                }`}
-                        >
-                            Inventory
-                        </button>
+                <div className="w-full flex justify-end gap-4 mb-4">
+                    {/* Tab navigation */}
+                    <div className="w-full sm:w-auto">
+                        <div className="flex bg-gray-100 p-1 rounded-md shadow-sm">
+                            <button
+                                onClick={() => setActiveTab('overview')}
+                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'overview'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
+                                    : 'text-gray-600 hover:text-primary-500'
+                                    }`}
+                            >
+                                Overview
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('sales')}
+                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'sales'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
+                                    : 'text-gray-600 hover:text-primary-500'
+                                    }`}
+                            >
+                                Sales
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('inventory')}
+                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'inventory'
+                                    ? 'bg-white shadow text-primary-600 font-medium'
+                                    : 'text-gray-600 hover:text-primary-500'
+                                    }`}
+                            >
+                                Inventory
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Date Filter Dropdown */}
+                    <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-4 sm:mb-0">
+                        <div className="relative inline-block w-full sm:w-auto">
+                            <select
+                                value={dateFilter}
+                                onChange={(e) => setDateFilter(e.target.value)}
+                                className="block appearance-none w-full bg-white border border-gray-300 hover:border-primary-500 px-4 py-2 pr-8 rounded shadow leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            >
+                                <option value="all">All Time</option>
+                                <option value="today">Today</option>
+                                <option value="week">Last 7 Days</option>
+                                <option value="month">Last Month</option>
+                                <option value="quarter">Last Quarter</option>
+                                <option value="year">Last Year</option>
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                                </svg>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
+
 
             {/* KPI Cards - Always visible on all tabs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -230,9 +342,11 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Sales</h3>
-                        {/* Fix for the error - ensure totalSales is always defined before using toFixed */}
                         <p className="text-xl font-bold text-primary-600">{formatCurrency(totalSales)}</p>
-                        <p className="text-sm text-gray-500 mt-1">{(salesData && salesData.length) || 0} transactions</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {filteredSalesData.length} {filteredSalesData.length === 1 ? 'transaction' : 'transactions'}
+                            {dateFilter !== 'all' && filteredSalesData.length === 0 && " in selected period"}
+                        </p>
                     </div>
                 </div>
 
@@ -244,7 +358,6 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Profit</h3>
-                        {/* Fix potential undefined error here too */}
                         <p className="text-xl font-bold text-accent-600">{formatCurrency(profit)}</p>
                         <p className="text-sm text-gray-500 mt-1">From all sales</p>
                     </div>
@@ -279,11 +392,11 @@ export default function Dashboard({ inventory, salesData }) {
                         </div>
                         <div className="p-4">
                             <div className="h-64">
-                                {salesData && salesData.length > 0 ? (
+                                {filteredSalesData.length > 0 ? (
                                     <canvas id="salesChart"></canvas>
                                 ) : (
                                     <div className="flex items-center justify-center h-full">
-                                        <p className="text-gray-500">No sales data available</p>
+                                        <p className="text-gray-500">No sales data available for the selected time period</p>
                                     </div>
                                 )}
                             </div>
@@ -331,7 +444,6 @@ export default function Dashboard({ inventory, salesData }) {
                                         <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity || 0}</td>
-                                            {/* Fix for line 761 error - Make sure item.total is defined */}
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.total)}</td>
                                         </tr>
                                     ))}
