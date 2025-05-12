@@ -6,9 +6,9 @@ export const theme = {
     extend: {
         colors: {
             primary: {
-                400: '#4f85e6', // lighter blue
-                500: '#6666AA', // main blue
-                700: '#222288', // darker blue
+                400: '#004099', // lighter blue
+                500: '#003380', // main blue
+                700: '#00205b', // darker blue
             },
             accent: {
                 400: '#ffcc66', // lighter gold

@@ -265,7 +265,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="name"
                                 value={formData.name}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border text-sm font-medium rounded focus:outline-none focus:ring-2 focus:ring-primary-500 ${errors.name ? 'border-red-500' : 'border-gray-300'
+                                className={`w-full px-3 py-2 border text-sm font-medium rounded focus:outline-none focus:ring-2 focus:ring-accent-400 ${errors.name ? 'border-red-500' : 'border-gray-300'
                                     }`}
                             />
                             {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name}</p>}
@@ -280,7 +280,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.category ? 'border-red-500' : 'border-gray-300'} text-sm font-medium`}
+                                className={`w-full px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.category ? 'border-red-500' : 'border-gray-300'} text-sm font-medium`}
                             >
                                 <option value="" className="text-sm font-normal">Select a category</option>
                                 {categories.map(category => (
@@ -303,7 +303,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full px-3 text-sm font-medium py-2 border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.price ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 text-sm font-medium py-2 border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.price ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.price && <p className="mt-1 text-xs text-red-500">{errors.price}</p>}
@@ -321,7 +321,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"
-                                    className={`w-full text-sm font-medium px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.costPrice ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full text-sm font-medium px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.costPrice ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.costPrice && <p className="mt-1 text-xs text-red-500">{errors.costPrice}</p>}
@@ -340,7 +340,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.quantity}
                                     onChange={handleChange}
                                     min="0"
-                                    className={`w-full text-sm font-medium px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full text-sm font-medium px-3 py-2 border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.quantity ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.quantity && <p className="mt-1 text-xs text-red-500">{errors.quantity}</p>}
@@ -358,7 +358,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     onChange={handleChange}
                                     min="0"
                                     placeholder="Leave blank if not needed"
-                                    className={`w-full px-3 py-2 text-sm font-medium border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 text-sm font-medium border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.lowStockThreshold ? 'border-red-500' : 'border-gray-300'
                                         }`}
                                 />
                                 {errors.lowStockThreshold && <p className="mt-1 text-xs text-red-500">{errors.lowStockThreshold}</p>}
@@ -377,7 +377,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                     value={formData.sku}
                                     onChange={handleChange}
                                     disabled={autoGenerateSKU}
-                                    className={`flex-1 px-3 text-sm font-medium py-2 border rounded focus:outline-none focus:ring-1 focus:ring-primary-500 ${errors.sku ? 'border-red-500' : 'border-gray-300'
+                                    className={`flex-1 px-3 text-sm font-medium py-2 border rounded focus:outline-none focus:ring-1 focus:ring-accent-400 ${errors.sku ? 'border-red-500' : 'border-gray-300'
                                         } ${autoGenerateSKU ? 'bg-gray-100' : ''}`}
                                 />
                                 <div className="flex items-center">
@@ -386,7 +386,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                         id="autoGenerateSKU"
                                         checked={autoGenerateSKU}
                                         onChange={handleSKUToggle}
-                                        className="h-4 w-4 text-primary-700 focus:ring-primary-500 border-gray-300 rounded"
+                                        className="h-4 w-4 text-primary-700 focus:ring-accent-400 border-gray-300 rounded"
                                     />
                                     <label htmlFor="autoGenerateSKU" className="ml-2 text-sm text-gray-700">
                                         Auto-generate
@@ -406,7 +406,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                                 name="image"
                                 accept="image/*"
                                 onChange={handleImageChange}
-                                className="w-full px-3 text-sm font-medium py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-full px-3 text-sm font-medium py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-accent-400"
                             />
                             {imageFile && (
                                 <p className="mt-1 text-sm text-green-600">
@@ -437,7 +437,7 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-primary-700 hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 flex items-center gap-2"
+                            className="px-4 py-2 border border-transparent rounded shadow-sm text-sm font-medium text-primary-700 bg-accent-500 hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-400 flex items-center gap-2"
                         >
                             {isSubmitting ? (
                                 <Loader className="h-4 w-4 animate-spin" />

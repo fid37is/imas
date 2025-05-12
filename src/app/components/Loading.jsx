@@ -1,17 +1,40 @@
 "use client"
 
 export default function Loading() {
+    const letters = 'skeepr'.split('');
+
     return (
         <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50 backdrop-blur-sm">
-            <div className="bg-white p-6 rounded-lg shadow-lg text-center max-w-sm w-full">
-                <div className="relative h-16 w-16 mx-auto mb-4">
-                    {/* Spinner with two circles for better visual effect */}
-                    <div className="absolute inset-0 rounded-full border-4 border-t-4 border-primary-500 border-t-transparent animate-spin"></div>
-                    <div className="absolute inset-2 rounded-full border-4 border-t-4 border-accent-500 border-t-transparent animate-spin animate-reverse"></div>
+            <div className="relative flex items-center justify-center">
+                <div className="flex space-x-2">
+                    {letters.map((letter, index) => (
+                        <span 
+                            key={index} 
+                            className="text-6xl font-bold text-primary-500 inline-block"
+                            style={{
+                                animation: `wave 1s ease-in-out infinite`,
+                                animationDelay: `${index * 0.15}s`
+                            }}
+                        >
+                            {letter}
+                        </span>
+                    ))}
                 </div>
-                <p className="text-primary-700 font-medium text-lg">Loading...</p>
-                <p className="text-gray-500 text-sm mt-2">Please wait while we fetch your data</p>
             </div>
         </div>
     );
 }
+
+// Note: Add these custom animations to your global CSS or Tailwind config
+const additionalAnimations = `
+@keyframes wave {
+    0%, 100% { 
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    50% { 
+        transform: translateY(-40px);
+        opacity: 1;
+    }
+}
+`

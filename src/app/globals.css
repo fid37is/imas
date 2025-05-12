@@ -4,15 +4,15 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-primary-500 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-70 disabled:cursor-not-allowed;
+    @apply bg-primary-500 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded transition-colors disabled:opacity-70 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-4 py-2 rounded-md transition-colors;
+    @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium px-4 py-2 rounded transition-colors;
   }
 
   .btn-accent {
-    @apply bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded-md transition-colors;
+    @apply bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded transition-colors;
   }
 }
 

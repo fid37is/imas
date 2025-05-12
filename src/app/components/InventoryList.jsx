@@ -429,7 +429,7 @@ export default function InventoryList({
                                 <button
                                     onClick={handleCompleteSale}
                                     disabled={isSellingLoading || (useCustomPrice && (customPrice === "" || Number(customPrice) <= 0))}
-                                    className={`px-4 py-2 bg-green-500 text-white rounded hover:bg-green-700 flex items-center ${
+                                    className={`px-4 py-2 bg-accent-500 text-primary-700 rounded hover:bg-accent-600 flex items-center ${
                                         (isSellingLoading || (useCustomPrice && (customPrice === "" || Number(customPrice) <= 0))) 
                                         ? 'opacity-75 cursor-not-allowed' 
                                         : ''

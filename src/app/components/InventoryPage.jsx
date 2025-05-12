@@ -308,7 +308,7 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
                 <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="bg-primary-700 hover:bg-primary-500 text-white font-medium px-4 py-2 rounded transition-colors"
+                        className="bg-accent-500 hover:bg-accent-600 text-primary-700 font-medium px-4 py-2 rounded transition-colors"
                         disabled={isLoading}
                     >
                         + New Item
