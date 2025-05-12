@@ -24,7 +24,7 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             <img 
                                 src="/img/skeepr.png" 
                                 alt="Company Logo" 
-                                className="h-12 w-35 mr-3"
+                                className="h-10 w-30 mr-3"
                             />
                             <span className="ml-2 text-sm text-gray-300 hidden sm:block">
                                 Tool-Up Store
