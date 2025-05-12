@@ -1,6 +1,19 @@
-// app/api/sheets/delete/route.js
 import { NextResponse } from 'next/server';
 import { getSheetsClient } from '../utils';
+
+// Add OPTIONS handler for CORS preflight requests
+export async function OPTIONS() {
+    return NextResponse.json(
+        {},
+        {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Methods': 'DELETE',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            },
+        }
+    );
+}
 
 export async function DELETE(request) {
     try {
@@ -59,7 +72,7 @@ export async function DELETE(request) {
             }
         });
     } catch (error) {
-        console.error('Error in DELETE /api/sheets/delete:', error);
+        console.error('Error in DELETE /api/sheets/deleteRow:', error);
         return NextResponse.json(
             { error: error.message },
             { status: 500 }

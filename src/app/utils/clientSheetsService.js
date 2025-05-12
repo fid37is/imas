@@ -156,20 +156,8 @@ export const deleteRowFromSheet = async (sheetName, rowIndex) => {
     };
 
     try {
-        // Try the primary endpoint
-        try {
-            const data = await apiRequest('/api/sheets/deleteRow', {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            });
-            return data.result;
-        } catch (e) {
-            console.log("Primary endpoint failed:", e.message);
-        }
-
-        // Fall back to the alternate endpoint
-        const data = await apiRequest('/api/sheets/delete', {
+        // Try the primary endpoint only - no fallback
+        const data = await apiRequest('/api/sheets/deleteRow', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody),
