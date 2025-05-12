@@ -29,17 +29,20 @@ export default function AddItemModal({ isOpen, onClose, onSave, itemToEdit = nul
         'Charger(IPhone)',
         'Charger(Type-C)',
         'Charger(Micro)',
-        'Charger(Belgium)',
         'Cord(IPhone)',
         'Cord(Type-C)',
         'Cord(Micro)',
         'Desktop charger',
-        'EarPiece',
-        'Head Phone',
+        'EarPhones',
+        'Head Phones',
+        'Others',
         'Phone Pouch',
-        'Head Stand',
+        'Phone Holder',
+        'Power Banks',
+        'Screen Protectors',
         'Selfie Stick',
-        'Other'
+        'Smart Watches',
+        
     ];
 
     const [errors, setErrors] = useState({});
