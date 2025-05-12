@@ -24,17 +24,3 @@ export default function Loading() {
         </div>
     );
 }
-
-// Note: Add these custom animations to your global CSS or Tailwind config
-const additionalAnimations = `
-@keyframes wave {
-    0%, 100% { 
-        transform: translateY(0);
-        opacity: 0.4;
-    }
-    50% { 
-        transform: translateY(-40px);
-        opacity: 1;
-    }
-}
-`
