@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
-import { Edit, ShoppingCart, Check } from "lucide-react"; // Added Check icon
+import { Edit, ShoppingCart, Check, X } from "lucide-react"; // Added X icon for closing image preview
 
 export default function InventoryList({
     items,
@@ -18,6 +18,11 @@ export default function InventoryList({
     // New state for button loading and success message
     const [isSellingLoading, setIsSellingLoading] = useState(false);
     const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+    // New state for custom selling price
+    const [useCustomPrice, setUseCustomPrice] = useState(false);
+    const [customPrice, setCustomPrice] = useState("");
+    // New state for image preview
+    const [previewImage, setPreviewImage] = useState(null);
 
     // Handle selecting all items
     const handleSelectAll = (e) => {
@@ -42,11 +47,36 @@ export default function InventoryList({
         setSellModalItem(item);
         setSellQuantity(1);
         setShowSuccessMessage(false); // Reset success message when opening modal
+        setUseCustomPrice(false); // Reset custom price toggle
+        setCustomPrice(item.price); // Initialize custom price with default price
     };
 
     // Handle edit item - passing the full item object to the parent component
     const handleEditItem = (item) => {
         onEditItem(item);
+    };
+
+    // Open image preview
+    const openImagePreview = (imageUrl, name) => {
+        if (imageUrl) {
+            setPreviewImage({ url: imageUrl, name });
+        }
+    };
+
+    // Close image preview
+    const closeImagePreview = () => {
+        setPreviewImage(null);
+    };
+
+    // Calculate the total price based on quantity and whether custom price is being used
+    const calculateTotal = () => {
+        if (!sellModalItem) return 0;
+        
+        if (useCustomPrice && customPrice !== "") {
+            return Number(customPrice) * sellQuantity;
+        }
+        
+        return sellModalItem.price * sellQuantity;
     };
 
     // New function to handle the sell process with loading state
@@ -57,7 +87,11 @@ export default function InventoryList({
 
         try {
             // Complete the sale with the parent component's function
-            await onSellItem(sellModalItem, sellQuantity);
+            // Pass the actual selling price used (either default or custom)
+            const actualSellingPrice = useCustomPrice && customPrice !== "" ? Number(customPrice) : sellModalItem.price;
+            
+            // We pass the custom price as an additional parameter but don't modify the original calculation logic
+            await onSellItem(sellModalItem, sellQuantity, actualSellingPrice);
 
             // Show success message
             setShowSuccessMessage(true);
@@ -120,6 +154,15 @@ export default function InventoryList({
         return threshold;
     };
 
+    // Handle custom price change
+    const handleCustomPriceChange = (e) => {
+        const value = e.target.value;
+        // Allow only numbers and decimal point
+        if (value === '' || /^\d*\.?\d*$/.test(value)) {
+            setCustomPrice(value);
+        }
+    };
+
     return (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
             {items.length === 0 ? (
@@ -128,7 +171,7 @@ export default function InventoryList({
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200 table-fixed">
                         <thead className="bg-gray-50">
                             <tr>
                                 <th scope="col" className="px-4 py-3 w-10 whitespace-nowrap">
@@ -139,31 +182,31 @@ export default function InventoryList({
                                         className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                                     />
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-14">
                                     Image
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-40">
                                     Name
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-24">
                                     SKU
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-32">
                                     Category
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-24">
                                     Price
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-24">
                                     Cost
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">
                                     Quantity
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">
                                     Low Stock
                                 </th>
-                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                                <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-28">
                                     Actions
                                 </th>
                             </tr>
@@ -184,53 +227,60 @@ export default function InventoryList({
                                     </td>
                                     <td className="px-4 py-3">
                                         {item.imageUrl ? (
-                                            <Image
-                                                src={item.imageUrl}
-                                                alt={item.name}
-                                                width={40}
-                                                height={40}
-                                                className="rounded-md object-cover"
-                                            />
+                                            <div 
+                                                className="cursor-pointer" 
+                                                onClick={() => openImagePreview(item.imageUrl, item.name)}
+                                            >
+                                                <Image
+                                                    src={item.imageUrl}
+                                                    alt={item.name}
+                                                    width={40}
+                                                    height={40}
+                                                    className="rounded-md object-cover hover:opacity-80 transition-opacity"
+                                                />
+                                            </div>
                                         ) : (
                                             <div className="w-10 h-10 bg-gray-200 flex items-center justify-center rounded-md text-sm text-gray-500">
                                                 N/A
                                             </div>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3 max-w-xs">
-                                        <div className="text-sm font-medium text-gray-900 truncate" title={item.name}>
-                                            {truncateText(item.name, 25)}
+                                    <td className="px-4 py-3">
+                                        <div className="text-sm font-medium text-gray-900 truncate w-full overflow-hidden text-ellipsis" title={item.name}>
+                                            {item.name}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="text-sm text-gray-500">{item.sku}</div>
-                                    </td>
-                                    <td className="px-4 py-3 max-w-[120px]">
-                                        <div className="text-sm text-gray-500 truncate" title={item.category}>
-                                            {truncateText(item.category, 15)}
+                                        <div className="text-sm text-gray-500 truncate w-full overflow-hidden text-ellipsis" title={item.sku}>
+                                            {item.sku}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="text-sm text-gray-900">
+                                        <div className="text-sm text-gray-500 truncate w-full overflow-hidden text-ellipsis" title={item.category}>
+                                            {item.category}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="text-sm text-gray-900 truncate w-full overflow-hidden text-ellipsis" title={formatCurrency(item.price)}>
                                             {formatCurrency(item.price)}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="text-sm text-gray-900">
+                                        <div className="text-sm text-gray-900 truncate w-full overflow-hidden text-ellipsis" title={formatCurrency(item.costPrice)}>
                                             {formatCurrency(item.costPrice)}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className={`text-sm ${isLowStock(item) ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                                        <div className={`text-sm truncate w-full overflow-hidden text-ellipsis ${isLowStock(item) ? 'text-red-600 font-medium' : 'text-gray-900'}`} title={item.quantity}>
                                             {item.quantity}
                                         </div>
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="text-sm text-gray-900">
+                                        <div className="text-sm text-gray-900 truncate w-full overflow-hidden text-ellipsis" title={displayThreshold(item.lowStockThreshold)}>
                                             {displayThreshold(item.lowStockThreshold)}
                                         </div>
                                     </td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
                                         <div className="flex justify-end space-x-3">
                                             <button
                                                 onClick={() => handleEditItem(item)}
@@ -255,6 +305,32 @@ export default function InventoryList({
                 </div>
             )}
 
+            {/* Image Preview Modal */}
+            {previewImage && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+                    <div className="relative bg-white rounded-lg p-2 max-w-3xl max-h-3xl">
+                        <div className="absolute top-2 right-2 z-10">
+                            <button 
+                                onClick={closeImagePreview}
+                                className="text-gray-700 hover:text-gray-900 bg-white rounded-full p-1 shadow-md"
+                            >
+                                <X className="h-6 w-6" />
+                            </button>
+                        </div>
+                        <div className="p-2">
+                            <Image
+                                src={previewImage.url}
+                                alt={previewImage.name}
+                                width={500}
+                                height={500}
+                                className="rounded-md object-contain max-h-96"
+                            />
+                            <p className="mt-2 text-center text-sm font-medium text-gray-700">{previewImage.name}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Sell Modal */}
             {sellModalItem && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -266,7 +342,7 @@ export default function InventoryList({
                                 Available: {sellModalItem.quantity} units
                             </p>
                             <p className="text-sm font-medium text-gray-700 mt-2">
-                                Price: {formatCurrency(sellModalItem.price)}
+                                Standard Price: {formatCurrency(sellModalItem.price)}
                             </p>
                         </div>
 
@@ -291,9 +367,51 @@ export default function InventoryList({
                                         className="w-full p-2 border border-gray-300 rounded-md"
                                     />
                                 </div>
+                                
+                                {/* Custom Price Toggle */}
+                                <div className="mb-4 flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id="useCustomPrice"
+                                        checked={useCustomPrice}
+                                        onChange={(e) => setUseCustomPrice(e.target.checked)}
+                                        className="mr-2 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <label htmlFor="useCustomPrice" className="text-sm font-medium text-gray-700">
+                                        Use custom price (for discount)
+                                    </label>
+                                </div>
+
+                                {/* Custom Price Input (only shown when toggle is on) */}
+                                {useCustomPrice && (
+                                    <div className="mb-4">
+                                        <label htmlFor="customPrice" className="block text-sm font-medium text-gray-700 mb-1">
+                                            Custom Price (per unit)
+                                        </label>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <span className="text-gray-500">₦</span>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                id="customPrice"
+                                                value={customPrice}
+                                                onChange={handleCustomPriceChange}
+                                                placeholder="0.00"
+                                                className="w-full p-2 pl-8 border border-gray-300 rounded-md"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="mb-4">
                                     <p className="text-sm font-medium text-gray-700">
-                                        Total: {formatCurrency(sellModalItem.price * sellQuantity)}
+                                        Total: {formatCurrency(calculateTotal())}
+                                        {useCustomPrice && customPrice !== "" && customPrice < sellModalItem.price && (
+                                            <span className="text-green-600 ml-2">
+                                                (Discounted)
+                                            </span>
+                                        )}
                                     </p>
                                 </div>
                             </>
@@ -302,7 +420,7 @@ export default function InventoryList({
                         <div className="flex justify-end space-x-3">
                             <button
                                 onClick={() => setSellModalItem(null)}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                             >
                                 {showSuccessMessage ? 'Close' : 'Cancel'}
                             </button>
@@ -310,11 +428,14 @@ export default function InventoryList({
                             {!showSuccessMessage && (
                                 <button
                                     onClick={handleCompleteSale}
-                                    disabled={isSellingLoading}
-                                    className={`px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 flex items-center ${isSellingLoading ? 'opacity-75 cursor-not-allowed' : ''
-                                        }`}
+                                    disabled={isSellingLoading || (useCustomPrice && (customPrice === "" || Number(customPrice) <= 0))}
+                                    className={`px-4 py-2 bg-green-500 text-white rounded hover:bg-green-700 flex items-center ${
+                                        (isSellingLoading || (useCustomPrice && (customPrice === "" || Number(customPrice) <= 0))) 
+                                        ? 'opacity-75 cursor-not-allowed' 
+                                        : ''
+                                    }`}
                                 >
-                                    {isSellingLoading ? 'Processing...' : 'Complete Sale'}
+                                    {isSellingLoading ? 'Processing...' : 'Confirm Sale'}
                                 </button>
                             )}
                         </div>
