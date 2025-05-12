@@ -1,11 +1,32 @@
 // src/app/utils/idGenerator.js
 
 // Store configuration - Edit this to change store initials
-const STORE_INITIALS = 'TU';
-const MAX_ID_NUMBER = 1000;
+const STORE_INITIALS = 'sk';
+const MAX_ID_NUMBER = 9999;
 
-// Keep track of the highest used ID number in memory
+// Keep track of the highest used number in memory
 let highestUsedNumber = 0;
+
+/**
+ * Finds the highest ID number from existing items
+ * 
+ * @param {Array} existingIds - Array of existing IDs
+ * @returns {number} The highest ID number found
+ */
+function findHighestIdNumber(existingIds = []) {
+    let highest = 0;
+    
+    existingIds.forEach(id => {
+        if (id && typeof id === 'string' && id.startsWith(STORE_INITIALS)) {
+            const numberPart = parseInt(id.substring(STORE_INITIALS.length), 10);
+            if (!isNaN(numberPart) && numberPart > highest) {
+                highest = numberPart;
+            }
+        }
+    });
+    
+    return highest;
+}
 
 /**
  * Generates a user-friendly ID for inventory items using store initials
@@ -16,25 +37,35 @@ let highestUsedNumber = 0;
  * @returns {string} A user-friendly store-specific ID
  */
 export function generateItemId(existingIds = []) {
-    // Update highest used number by examining existing IDs
-    if (existingIds && existingIds.length > 0) {
-        existingIds.forEach(id => {
-            if (id && id.startsWith(STORE_INITIALS)) {
-                const numberPart = parseInt(id.substring(STORE_INITIALS.length), 10);
-                if (!isNaN(numberPart) && numberPart > highestUsedNumber) {
-                    highestUsedNumber = numberPart;
-                }
-            }
-        });
+    // First try to get highest ID from localStorage for persistence
+    try {
+        const storedHighestId = localStorage.getItem('highestInventoryId');
+        if (storedHighestId) {
+            highestUsedNumber = parseInt(storedHighestId, 10);
+        }
+    } catch (error) {
+        console.warn('Could not access localStorage for ID persistence:', error);
     }
-
+    
+    // Then check existingIds to ensure we're always higher than any existing ID
+    const highestExistingId = findHighestIdNumber(existingIds);
+    
+    // Use the higher of our stored value or what we found in existing IDs
+    highestUsedNumber = Math.max(highestUsedNumber, highestExistingId);
+    
     // Increment to the next available number
     highestUsedNumber += 1;
     
     // Ensure we don't exceed the maximum
     if (highestUsedNumber > MAX_ID_NUMBER) {
-        // Reset to 1 if we exceed the maximum (or handle differently as needed)
-        highestUsedNumber = 1;
+        highestUsedNumber = 1; // Reset to 1 if we exceed the maximum
+    }
+    
+    // Store the new highest number in localStorage for persistence
+    try {
+        localStorage.setItem('highestInventoryId', highestUsedNumber.toString());
+    } catch (error) {
+        console.warn('Could not store highest ID in localStorage:', error);
     }
     
     // Format: store initials followed by the number (padded)
@@ -66,4 +97,24 @@ export function getIdNumber(id) {
     
     const numberPart = parseInt(id.substring(STORE_INITIALS.length), 10);
     return isNaN(numberPart) ? -1 : numberPart;
+}
+
+/**
+ * Initializes the ID generator with existing inventory data
+ * Call this function when your app loads with all existing inventory IDs
+ * 
+ * @param {Array} existingIds - Array of all existing inventory IDs
+ */
+export function initializeIdGenerator(existingIds = []) {
+    const highestExistingId = findHighestIdNumber(existingIds);
+    
+    // Update localStorage and memory with the highest ID
+    if (highestExistingId > 0) {
+        highestUsedNumber = highestExistingId;
+        try {
+            localStorage.setItem('highestInventoryId', highestExistingId.toString());
+        } catch (error) {
+            console.warn('Could not initialize highest ID in localStorage:', error);
+        }
+    }
 }

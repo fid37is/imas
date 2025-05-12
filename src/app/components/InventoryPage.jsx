@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import AddItemModal from './AddItemModal';
 import InventoryList from './InventoryList';
 import { addInventoryItem, updateInventoryItem, deleteInventoryItem } from '../utils/inventoryService';
+import { initializeIdGenerator } from '../utils/idGenerator';
 
 // Custom Alert Component
 const CustomAlert = ({ message, type, isOpen, onClose }) => {
@@ -115,6 +116,14 @@ export default function InventoryPage({ inventory, setInventory, onSellItem }) {
         message: '',
         onConfirm: () => { }
     });
+
+    // Initialize ID generator with existing inventory IDs
+    useEffect(() => {
+        if (inventory && inventory.length > 0) {
+            const existingIds = inventory.map(item => item.id);
+            initializeIdGenerator(existingIds);
+        }
+    }, [inventory]);
 
     // Show alert helper function
     const showAlert = (message, type = 'info') => {
