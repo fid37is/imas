@@ -19,58 +19,102 @@ export default function Dashboard({ inventory, salesData }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [dateFilter, setDateFilter] = useState('all');
     const [filteredSalesData, setFilteredSalesData] = useState([]);
+    const [chartsInitialized, setChartsInitialized] = useState(false);
+    const [isDataLoading, setIsDataLoading] = useState(true);
 
-    // Store active tab in localStorage to persist across refreshes
+    // Initialize and retrieve user preferences from localStorage
     useEffect(() => {
-        // Retrieve active tab from localStorage if available
-        const savedTab = localStorage.getItem('dashboardActiveTab');
-        if (savedTab) {
-            setActiveTab(savedTab);
-        }
+        // Check if we're in a browser environment
+        if (typeof window !== 'undefined') {
+            // Retrieve active tab from localStorage if available
+            const savedTab = localStorage.getItem('dashboardActiveTab');
+            if (savedTab) {
+                setActiveTab(savedTab);
+            }
 
-        // Retrieve date filter from localStorage if available
-        const savedDateFilter = localStorage.getItem('dashboardDateFilter');
-        if (savedDateFilter) {
-            setDateFilter(savedDateFilter);
+            // Retrieve date filter from localStorage if available
+            const savedDateFilter = localStorage.getItem('dashboardDateFilter');
+            if (savedDateFilter) {
+                setDateFilter(savedDateFilter);
+            }
+
+            // Signal data is now loaded
+            setIsDataLoading(false);
         }
     }, []);
 
     // Save active tab to localStorage whenever it changes
     useEffect(() => {
-        localStorage.setItem('dashboardActiveTab', activeTab);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('dashboardActiveTab', activeTab);
+        }
     }, [activeTab]);
 
     // Save date filter to localStorage whenever it changes
     useEffect(() => {
-        localStorage.setItem('dashboardDateFilter', dateFilter);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('dashboardDateFilter', dateFilter);
+        }
     }, [dateFilter]);
 
-    // Real-time updates: Add event listener for inventory changes
+    // Apply date filter whenever it changes or salesData changes
     useEffect(() => {
-        // This will recalculate metrics whenever inventory changes
+        if (Array.isArray(salesData)) {
+            applyDateFilter();
+        }
+    }, [dateFilter, salesData]);
+
+    // Calculate metrics whenever filtered data or inventory changes
+    useEffect(() => {
         calculateMetrics();
+    }, [filteredSalesData, inventory]);
 
-        // Apply date filter to sales data
-        applyDateFilter();
+    // Create charts when data is ready and tab changes
+    useEffect(() => {
+        if (!isDataLoading && (activeTab === 'overview' || activeTab === 'sales')) {
+            // Clean up old charts to prevent memory leaks
+            cleanupCharts();
 
-        const timeout = setTimeout(() => {
-            createCharts();
-        }, 100);
+            // Add a small delay to ensure DOM elements are ready
+            const timeout = setTimeout(() => {
+                createCharts();
+                setChartsInitialized(true);
+            }, 100);
 
+            return () => {
+                clearTimeout(timeout);
+            };
+        }
+    }, [activeTab, filteredSalesData, categoryDistribution, isDataLoading]);
+
+    // Cleanup charts when component unmounts or before recreating
+    const cleanupCharts = () => {
+        if (typeof window !== 'undefined') {
+            // Get all chart instances and destroy them
+            const chartInstances = Chart.instances || {};
+            Object.keys(chartInstances).forEach(key => {
+                if (chartInstances[key]) {
+                    chartInstances[key].destroy();
+                }
+            });
+        }
+    };
+
+    // Cleanup charts on component unmount
+    useEffect(() => {
         return () => {
-            clearTimeout(timeout);
-            if (typeof window !== 'undefined') {
-                const charts = Chart.instances || {};
-                Object.keys(charts).forEach(key => charts[key].destroy());
-            }
+            cleanupCharts();
         };
-    }, [inventory, salesData, activeTab, dateFilter]);
+    }, []);
 
     const applyDateFilter = () => {
-        const salesArray = Array.isArray(salesData) ? salesData : [];
+        if (!Array.isArray(salesData)) {
+            setFilteredSalesData([]);
+            return;
+        }
 
         if (dateFilter === 'all') {
-            setFilteredSalesData(salesArray);
+            setFilteredSalesData(salesData);
             return;
         }
 
@@ -79,33 +123,40 @@ export default function Dashboard({ inventory, salesData }) {
 
         switch (dateFilter) {
             case 'today':
-                startDate = new Date(now.setHours(0, 0, 0, 0));
+                startDate = new Date(now);
+                startDate.setHours(0, 0, 0, 0);
                 break;
             case 'week':
-                startDate = new Date(now.setDate(now.getDate() - 7));
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - 7);
                 break;
             case 'month':
-                startDate = new Date(now.setMonth(now.getMonth() - 1));
+                startDate = new Date(now);
+                startDate.setMonth(now.getMonth() - 1);
                 break;
             case 'quarter':
-                startDate = new Date(now.setMonth(now.getMonth() - 3));
+                startDate = new Date(now);
+                startDate.setMonth(now.getMonth() - 3);
                 break;
             case 'year':
-                startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+                startDate = new Date(now);
+                startDate.setFullYear(now.getFullYear() - 1);
                 break;
             default:
                 startDate = new Date(0); // Beginning of time
         }
 
-        const filtered = salesArray.filter(sale => {
+        const filtered = salesData.filter(sale => {
+            // Handle both timestamp and date fields
             const saleDate = new Date(sale.timestamp || sale.date);
-            return saleDate >= startDate;
+            return !isNaN(saleDate.getTime()) && saleDate >= startDate;
         });
 
         setFilteredSalesData(filtered);
     };
 
     const calculateMetrics = () => {
+        // Handle inventory calculations
         const inventoryArray = Array.isArray(inventory) ? inventory : [];
         let totalValue = 0;
         let lowStock = 0;
@@ -121,9 +172,8 @@ export default function Dashboard({ inventory, salesData }) {
         setTotalItems(inventoryArray.length);
         setLowStockItems(lowStock);
 
-        // Use the filtered sales data for calculations
-        const salesArray = filteredSalesData.length > 0 ? filteredSalesData : (Array.isArray(salesData) ? salesData : []);
-
+        // Handle sales calculations
+        const salesArray = Array.isArray(filteredSalesData) ? filteredSalesData : [];
         let salesSum = 0;
         let profitSum = 0;
         const itemSales = {};
@@ -152,8 +202,13 @@ export default function Dashboard({ inventory, salesData }) {
 
         setTotalSales(salesSum);
         setProfit(profitSum);
-        setTopSellingItems(Object.values(itemSales).sort((a, b) => b.quantity - a.quantity).slice(0, 5));
+        setTopSellingItems(
+            Object.values(itemSales)
+                .sort((a, b) => b.quantity - a.quantity)
+                .slice(0, 5)
+        );
 
+        // Calculate category distribution
         const categories = {};
         inventoryArray.forEach(item => {
             if (item?.category) {
@@ -166,36 +221,34 @@ export default function Dashboard({ inventory, salesData }) {
     };
 
     const createCharts = () => {
-        const salesArray = filteredSalesData.length > 0 ? filteredSalesData : [];
+        const salesArray = Array.isArray(filteredSalesData) ? filteredSalesData : [];
 
-        // Clear existing charts first
-        if (typeof window !== 'undefined') {
-            if (document.getElementById('salesChart')) {
-                const ctx = document.getElementById('salesChart').getContext('2d');
-                if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
-            }
-
-            if (document.getElementById('categoryChart')) {
-                const ctx = document.getElementById('categoryChart').getContext('2d');
-                if (Chart.getChart(ctx)) Chart.getChart(ctx).destroy();
-            }
-        }
-
-        // Only create sales chart if there's data
+        // Create sales chart if it exists and has data
         if (salesArray.length > 0 && document.getElementById('salesChart')) {
-            const ctx = document.getElementById('salesChart').getContext('2d');
+            const ctx = document.getElementById('salesChart');
+            if (!ctx) return;
 
             const salesByDate = {};
             salesArray.forEach(sale => {
                 if (sale?.timestamp || sale?.date) {
-                    const date = new Date(sale.timestamp || sale.date).toLocaleDateString();
-                    salesByDate[date] = (salesByDate[date] || 0) + Number(sale?.totalPrice ?? sale?.total ?? 0);
+                    const date = new Date(sale.timestamp || sale.date);
+                    if (!isNaN(date.getTime())) {
+                        const dateStr = date.toLocaleDateString();
+                        salesByDate[dateStr] = (salesByDate[dateStr] || 0) + Number(sale?.totalPrice ?? sale?.total ?? 0);
+                    }
                 }
             });
 
             const sortedDates = Object.keys(salesByDate).sort((a, b) => new Date(a) - new Date(b));
 
-            new Chart(ctx, {
+            // Check if there's a chart already and destroy it
+            let salesChart = Chart.getChart(ctx);
+            if (salesChart) {
+                salesChart.destroy();
+            }
+
+            // Create new chart
+            salesChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: sortedDates,
@@ -220,10 +273,19 @@ export default function Dashboard({ inventory, salesData }) {
             });
         }
 
-        if (categoryDistribution.length && document.getElementById('categoryChart')) {
-            const ctx = document.getElementById('categoryChart').getContext('2d');
+        // Create category chart if it exists and has data
+        if (categoryDistribution.length > 0 && document.getElementById('categoryChart')) {
+            const ctx = document.getElementById('categoryChart');
+            if (!ctx) return;
 
-            new Chart(ctx, {
+            // Check if there's a chart already and destroy it
+            let categoryChart = Chart.getChart(ctx);
+            if (categoryChart) {
+                categoryChart.destroy();
+            }
+
+            // Create new chart
+            categoryChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
                     labels: categoryDistribution.map(cat => cat.name),
@@ -259,7 +321,7 @@ export default function Dashboard({ inventory, salesData }) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Dashboard</h1>
 
-                <div className="w-full flex justify-end gap-4 mb-4">
+                <div className="w-full flex flex-col sm:flex-row justify-end gap-4 mb-4">
                     {/* Tab navigation */}
                     <div className="w-full sm:w-auto">
                         <div className="flex bg-gray-100 p-1 rounded-md shadow-sm">
@@ -294,8 +356,8 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
 
                     {/* Date Filter Dropdown */}
-                    <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mb-4 sm:mb-0">
-                        <div className="relative inline-block w-full sm:w-auto">
+                    <div className="w-full sm:w-auto">
+                        <div className="relative inline-block w-full">
                             <select
                                 value={dateFilter}
                                 onChange={(e) => setDateFilter(e.target.value)}
@@ -317,7 +379,6 @@ export default function Dashboard({ inventory, salesData }) {
                     </div>
                 </div>
             </div>
-
 
             {/* KPI Cards - Always visible on all tabs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -345,7 +406,7 @@ export default function Dashboard({ inventory, salesData }) {
                         <p className="text-xl font-bold text-primary-600">{formatCurrency(totalSales)}</p>
                         <p className="text-sm text-gray-500 mt-1">
                             {filteredSalesData.length} {filteredSalesData.length === 1 ? 'transaction' : 'transactions'}
-                            {dateFilter !== 'all' && filteredSalesData.length === 0 && " in selected period"}
+                            {dateFilter !== 'all' && " in selected period"}
                         </p>
                     </div>
                 </div>
@@ -359,7 +420,9 @@ export default function Dashboard({ inventory, salesData }) {
                     <div>
                         <h3 className="text-gray-500 text-sm font-medium">Total Profit</h3>
                         <p className="text-xl font-bold text-accent-600">{formatCurrency(profit)}</p>
-                        <p className="text-sm text-gray-500 mt-1">From all sales</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {dateFilter !== 'all' ? `For selected period` : 'From all sales'}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -396,7 +459,14 @@ export default function Dashboard({ inventory, salesData }) {
                                     <canvas id="salesChart"></canvas>
                                 ) : (
                                     <div className="flex items-center justify-center h-full">
-                                        <p className="text-gray-500">No sales data available for the selected time period</p>
+                                        <p className="text-gray-500">
+                                            {dateFilter !== 'all'
+                                                ? `No sales data available for the ${dateFilter === 'today' ? 'current day' :
+                                                    dateFilter === 'week' ? 'last 7 days' :
+                                                        dateFilter === 'month' ? 'last month' :
+                                                            dateFilter === 'quarter' ? 'last quarter' : 'last year'}`
+                                                : 'No sales data available'}
+                                        </p>
                                     </div>
                                 )}
                             </div>
@@ -410,7 +480,7 @@ export default function Dashboard({ inventory, salesData }) {
                         </div>
                         <div className="p-4">
                             <div className="h-64">
-                                {categoryDistribution && categoryDistribution.length > 0 ? (
+                                {categoryDistribution.length > 0 ? (
                                     <canvas id="categoryChart"></canvas>
                                 ) : (
                                     <div className="flex items-center justify-center h-full">
@@ -429,7 +499,7 @@ export default function Dashboard({ inventory, salesData }) {
                     <div className="px-4 py-3 border-b border-gray-200">
                         <h3 className="text-lg font-medium text-primary-600">Top Selling Items</h3>
                     </div>
-                    {topSellingItems && topSellingItems.length > 0 ? (
+                    {topSellingItems.length > 0 ? (
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-primary-50">
@@ -456,7 +526,11 @@ export default function Dashboard({ inventory, salesData }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17l6-6-6-6" />
                             </svg>
                             <h3 className="mt-2 text-sm font-medium text-gray-900">No sales data</h3>
-                            <p className="mt-1 text-sm text-gray-500">Start selling to see your top products.</p>
+                            <p className="mt-1 text-sm text-gray-500">
+                                {dateFilter !== 'all'
+                                    ? `No sales recorded for the selected time period.`
+                                    : 'Start selling to see your top products.'}
+                            </p>
                         </div>
                     )}
                 </div>
@@ -481,8 +555,8 @@ export default function Dashboard({ inventory, salesData }) {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {inventory
-                                            .filter(item => item.quantity <= item.lowStockThreshold)
+                                        {Array.isArray(inventory) && inventory
+                                            .filter(item => (item.quantity <= item.lowStockThreshold))
                                             .map((item) => (
                                                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
@@ -504,7 +578,7 @@ export default function Dashboard({ inventory, salesData }) {
                         )}
                     </div>
 
-                    {/* Recent Stock Updates */}
+                    {/* Inventory Stats */}
                     <div className="bg-white rounded-lg shadow-md overflow-hidden">
                         <div className="px-4 py-3 border-b border-gray-200">
                             <h3 className="text-lg font-medium text-primary-600">Inventory Stats</h3>
@@ -517,22 +591,31 @@ export default function Dashboard({ inventory, salesData }) {
                                     {categoryDistribution && categoryDistribution.length > 0 ? (
                                         <div className="space-y-2">
                                             {categoryDistribution.map((category, index) => {
-                                                const categoryItems = inventory.filter(item => item.category === category.name);
+                                                const inventoryArray = Array.isArray(inventory) ? inventory : [];
+                                                const categoryItems = inventoryArray.filter(item => item.category === category.name);
                                                 const categoryValue = categoryItems.reduce((sum, item) =>
-                                                    sum + ((item.price || 0) * (item.quantity || 0)), 0);
+                                                    sum + ((Number(item?.price) || 0) * (Number(item?.quantity) || 0)), 0);
                                                 const percentage = totalInventoryValue > 0 ?
                                                     (categoryValue / totalInventoryValue) * 100 : 0;
 
                                                 return (
-                                                    <div key={index}>
-                                                        <div className="flex justify-between text-sm mb-1">
-                                                            <span className="font-medium text-gray-700">{category.name}</span>
-                                                            <span className="text-gray-600">${categoryValue.toFixed(2)}</span>
+                                                    <div key={index} className="relative pt-1">
+                                                        <div className="flex mb-2 items-center justify-between">
+                                                            <div>
+                                                                <span className="text-xs font-semibold inline-block text-primary-600">
+                                                                    {category.name}
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <span className="text-xs font-semibold inline-block text-primary-600">
+                                                                    {formatCurrency(categoryValue)} ({percentage.toFixed(1)}%)
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                                        <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-100">
                                                             <div
-                                                                className="bg-primary-500 h-2 rounded-full"
                                                                 style={{ width: `${percentage}%` }}
+                                                                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500"
                                                             ></div>
                                                         </div>
                                                     </div>
@@ -540,23 +623,26 @@ export default function Dashboard({ inventory, salesData }) {
                                             })}
                                         </div>
                                     ) : (
-                                        <p className="text-gray-500 text-sm">No category data available</p>
+                                        <p className="text-sm text-gray-500">No category data available</p>
                                     )}
                                 </div>
 
-                                {/* Inventory Quick Stats */}
-                                <div className="grid grid-cols-2 gap-4 mt-2">
-                                    <div className="bg-blue-50 rounded-lg p-4">
-                                        <h4 className="text-sm font-medium text-blue-700">Avg. Item Value</h4>
-                                        <p className="text-xl font-bold text-blue-800 mt-1">
-                                            {totalItems > 0 ? formatCurrency(totalInventoryValue / totalItems) : formatCurrency(0)}
-                                        </p>
-                                    </div>
-                                    <div className="bg-purple-50 rounded-lg p-4">
-                                        <h4 className="text-sm font-medium text-purple-700">Total Categories</h4>
-                                        <p className="text-xl font-bold text-purple-800 mt-1">
-                                            {categoryDistribution ? categoryDistribution.length : 0}
-                                        </p>
+                                {/* Stock Level Summary */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Stock Level Summary</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-green-50 p-3 rounded-lg text-center">
+                                            <p className="text-sm text-gray-500">Healthy Items</p>
+                                            <p className="text-xl font-bold text-green-600">
+                                                {totalItems - lowStockItems}
+                                            </p>
+                                        </div>
+                                        <div className="bg-red-50 p-3 rounded-lg text-center">
+                                            <p className="text-sm text-gray-500">Low Stock Items</p>
+                                            <p className="text-xl font-bold text-red-600">
+                                                {lowStockItems}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

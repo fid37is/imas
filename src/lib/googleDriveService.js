@@ -1,34 +1,19 @@
 // lib/googleDriveService.js
 import fs from 'fs';
 import path from 'path';
-import { google } from 'googleapis';
 import { Readable } from 'stream';
 import { v4 as uuidv4 } from 'uuid';
-
-// Configure Google Drive API
-const configureGoogleDrive = () => {
-    try {
-        const auth = new google.auth.GoogleAuth({
-            credentials: JSON.parse(process.env.GOOGLE_DRIVE_CREDENTIALS),
-            scopes: ['https://www.googleapis.com/auth/drive.file']
-        });
-
-        return google.drive({ version: 'v3', auth });
-    } catch (error) {
-        console.error('Error configuring Google Drive:', error);
-        return null;
-    }
-};
+import { authorizeJwtClient, getDrive } from './googleSheetsService';
 
 // Function to upload image to Google Drive
 export const uploadToGoogleDrive = async (fileObject) => {
     try {
-        const drive = configureGoogleDrive();
+        // Use the existing JWT client that's already working for Sheets
+        await authorizeJwtClient();
+        const drive = getDrive();
 
-        if (!drive) {
-            throw new Error('Google Drive configuration failed');
-        }
-
+        console.log('Uploading to Google Drive folder:', process.env.GOOGLE_DRIVE_FOLDER_ID);
+        
         const buffer = await fileObject.arrayBuffer();
         const stream = Readable.from(Buffer.from(buffer));
 
@@ -41,8 +26,11 @@ export const uploadToGoogleDrive = async (fileObject) => {
             media: {
                 mimeType: fileObject.type,
                 body: stream
-            }
+            },
+            fields: 'id,webViewLink,webContentLink'
         });
+
+        console.log('File created in Drive with ID:', response.data.id);
 
         // Make the file publicly accessible
         await drive.permissions.create({
@@ -53,13 +41,11 @@ export const uploadToGoogleDrive = async (fileObject) => {
             }
         });
 
-        // Get the file's web view link
-        const fileData = await drive.files.get({
-            fileId: response.data.id,
-            fields: 'webViewLink,webContentLink'
-        });
+        console.log('Public permission applied to file');
 
-        return fileData.data.webContentLink || fileData.data.webViewLink;
+        // Return a direct URL that works for image display
+        // This format is more reliable for displaying images in browsers
+        return `https://drive.google.com/thumbnail?id=${response.data.id}&sz=w1000`;
     } catch (error) {
         console.error('Google Drive upload error:', error);
         throw error;
@@ -85,6 +71,8 @@ export const saveFileLocally = async (fileObject) => {
         const buffer = await fileObject.arrayBuffer();
         fs.writeFileSync(filePath, Buffer.from(buffer));
 
+        console.log('File saved locally at:', filePath);
+
         // Return URL path that can be used in browser
         return `/uploads/${uniqueFilename}`;
     } catch (error) {
@@ -97,10 +85,13 @@ export const saveFileLocally = async (fileObject) => {
 export const uploadImage = async (fileObject) => {
     try {
         // First try Google Drive
-        return await uploadToGoogleDrive(fileObject);
+        console.log('Attempting to upload to Google Drive first...');
+        const driveUrl = await uploadToGoogleDrive(fileObject);
+        console.log('Successfully uploaded to Google Drive:', driveUrl);
+        return driveUrl;
     } catch (googleDriveError) {
         console.warn('Google Drive upload failed, falling back to local storage:', googleDriveError.message);
-
+        
         // Fallback to local storage
         return await saveFileLocally(fileObject);
     }
@@ -110,16 +101,32 @@ export const uploadImage = async (fileObject) => {
 export const deleteImage = async (fileUrl) => {
     try {
         // Check if it's a Google Drive URL or local file
-        if (fileUrl.includes('drive.google.com')) {
+        if (fileUrl && fileUrl.includes('drive.google.com')) {
             // Extract file ID from URL
-            const fileId = new URL(fileUrl).searchParams.get('id');
+            let fileId;
+            
+            if (fileUrl.includes('thumbnail?id=')) {
+                // Handle our thumbnail URL format
+                fileId = new URL(fileUrl).searchParams.get('id');
+            } else if (fileUrl.includes('export=view&id=')) {
+                // Handle our other URL format
+                fileId = new URL(fileUrl).searchParams.get('id');
+            } else {
+                // Handle standard Drive URLs
+                const matches = fileUrl.match(/[-\w]{25,}/);
+                fileId = matches ? matches[0] : null;
+            }
+            
             if (!fileId) throw new Error('Invalid Google Drive URL');
 
-            const drive = configureGoogleDrive();
+            console.log('Deleting file from Google Drive with ID:', fileId);
+            await authorizeJwtClient();
+            const drive = getDrive();
             await drive.files.delete({ fileId });
-        } else {
+        } else if (fileUrl && !fileUrl.startsWith('http')) {
             // It's a local file
             const filePath = path.join(process.cwd(), 'public', fileUrl);
+            console.log('Deleting local file:', filePath);
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
             }

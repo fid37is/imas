@@ -12,6 +12,7 @@ export async function DELETE(request) {
             );
         }
 
+        console.log('Attempting to delete file:', fileUrl);
         await deleteImage(fileUrl);
 
         return NextResponse.json({
