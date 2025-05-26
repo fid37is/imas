@@ -329,3 +329,349 @@ export const getSales = async () => {
         throw error;
     }
 };
+
+// Additional functions for inventory service to support webhook integration
+
+// Get inventory item by ID
+export const getInventoryItemById = async (itemId) => {
+    try {
+        const inventory = await getInventory();
+        const item = inventory.find(i => i.id === itemId);
+        
+        if (!item) {
+            throw new Error(`Item with ID ${itemId} not found`);
+        }
+        
+        return item;
+    } catch (error) {
+        console.error('Error getting inventory item by ID:', error);
+        throw error;
+    }
+};
+
+// Update inventory after order processing
+export const updateInventoryAfterOrder = async (orderItems) => {
+    try {
+        const results = [];
+        let allSuccess = true;
+
+        for (const orderItem of orderItems) {
+            try {
+                // Get current inventory item
+                const inventoryItem = await getInventoryItemById(orderItem.productId);
+                
+                if (!inventoryItem) {
+                    console.error(`Item ${orderItem.productId} not found in inventory`);
+                    allSuccess = false;
+                    results.push({
+                        productId: orderItem.productId,
+                        success: false,
+                        error: 'Item not found'
+                    });
+                    continue;
+                }
+
+                // Check if we have enough stock
+                if (inventoryItem.quantity < orderItem.quantity) {
+                    console.error(`Insufficient stock for ${orderItem.productId}. Available: ${inventoryItem.quantity}, Requested: ${orderItem.quantity}`);
+                    allSuccess = false;
+                    results.push({
+                        productId: orderItem.productId,
+                        success: false,
+                        error: 'Insufficient stock'
+                    });
+                    continue;
+                }
+
+                // Update inventory quantity
+                const updatedItem = {
+                    ...inventoryItem,
+                    quantity: inventoryItem.quantity - orderItem.quantity
+                };
+
+                await updateInventoryItem(inventoryItem.id, updatedItem);
+                
+                results.push({
+                    productId: orderItem.productId,
+                    success: true,
+                    previousQuantity: inventoryItem.quantity,
+                    newQuantity: updatedItem.quantity,
+                    quantityReduced: orderItem.quantity
+                });
+
+                // Check if item is now below low stock threshold
+                if (updatedItem.lowStockThreshold && 
+                    updatedItem.quantity <= updatedItem.lowStockThreshold) {
+                    console.warn(`Item ${updatedItem.name} is now below low stock threshold`);
+                    // You can trigger low stock alert here if needed
+                }
+
+            } catch (error) {
+                console.error(`Error updating inventory for item ${orderItem.productId}:`, error);
+                allSuccess = false;
+                results.push({
+                    productId: orderItem.productId,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        return {
+            success: allSuccess,
+            results,
+            updatedCount: results.filter(r => r.success).length,
+            totalCount: orderItems.length
+        };
+
+    } catch (error) {
+        console.error('Error updating inventory after order:', error);
+        return {
+            success: false,
+            error: error.message,
+            results: []
+        };
+    }
+};
+
+// Restore inventory after order cancellation
+export const restoreInventoryAfterCancellation = async (orderItems) => {
+    try {
+        const results = [];
+        let allSuccess = true;
+
+        for (const orderItem of orderItems) {
+            try {
+                // Get current inventory item
+                const inventoryItem = await getInventoryItemById(orderItem.productId);
+                
+                if (!inventoryItem) {
+                    console.error(`Item ${orderItem.productId} not found in inventory`);
+                    allSuccess = false;
+                    results.push({
+                        productId: orderItem.productId,
+                        success: false,
+                        error: 'Item not found'
+                    });
+                    continue;
+                }
+
+                // Restore inventory quantity
+                const updatedItem = {
+                    ...inventoryItem,
+                    quantity: inventoryItem.quantity + orderItem.quantity
+                };
+
+                await updateInventoryItem(inventoryItem.id, updatedItem);
+                
+                results.push({
+                    productId: orderItem.productId,
+                    success: true,
+                    previousQuantity: inventoryItem.quantity,
+                    newQuantity: updatedItem.quantity,
+                    quantityRestored: orderItem.quantity
+                });
+
+            } catch (error) {
+                console.error(`Error restoring inventory for item ${orderItem.productId}:`, error);
+                allSuccess = false;
+                results.push({
+                    productId: orderItem.productId,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        return {
+            success: allSuccess,
+            results,
+            restoredCount: results.filter(r => r.success).length,
+            totalCount: orderItems.length
+        };
+
+    } catch (error) {
+        console.error('Error restoring inventory after cancellation:', error);
+        return {
+            success: false,
+            error: error.message,
+            results: []
+        };
+    }
+};
+
+// Get low stock items
+export const getLowStockItems = async () => {
+    try {
+        const inventory = await getInventory();
+        
+        const lowStockItems = inventory.filter(item => {
+            // Only consider items that have a low stock threshold set
+            if (!item.lowStockThreshold || item.lowStockThreshold === null) {
+                return false;
+            }
+            
+            return item.quantity <= item.lowStockThreshold;
+        });
+
+        return lowStockItems;
+    } catch (error) {
+        console.error('Error getting low stock items:', error);
+        throw error;
+    }
+};
+
+// Bulk update inventory quantities
+export const bulkUpdateInventory = async (updates) => {
+    try {
+        const results = [];
+        let allSuccess = true;
+
+        for (const update of updates) {
+            try {
+                const { itemId, quantity, operation = 'set' } = update;
+                
+                // Get current inventory item
+                const inventoryItem = await getInventoryItemById(itemId);
+                
+                if (!inventoryItem) {
+                    allSuccess = false;
+                    results.push({
+                        itemId,
+                        success: false,
+                        error: 'Item not found'
+                    });
+                    continue;
+                }
+
+                let newQuantity;
+                switch (operation) {
+                    case 'add':
+                        newQuantity = inventoryItem.quantity + quantity;
+                        break;
+                    case 'subtract':
+                        newQuantity = Math.max(0, inventoryItem.quantity - quantity);
+                        break;
+                    case 'set':
+                    default:
+                        newQuantity = quantity;
+                        break;
+                }
+
+                // Update inventory
+                const updatedItem = {
+                    ...inventoryItem,
+                    quantity: newQuantity
+                };
+
+                await updateInventoryItem(itemId, updatedItem);
+                
+                results.push({
+                    itemId,
+                    success: true,
+                    previousQuantity: inventoryItem.quantity,
+                    newQuantity,
+                    operation
+                });
+
+            } catch (error) {
+                console.error(`Error updating inventory for item ${update.itemId}:`, error);
+                allSuccess = false;
+                results.push({
+                    itemId: update.itemId,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        return {
+            success: allSuccess,
+            results,
+            updatedCount: results.filter(r => r.success).length,
+            totalCount: updates.length
+        };
+
+    } catch (error) {
+        console.error('Error in bulk inventory update:', error);
+        return {
+            success: false,
+            error: error.message,
+            results: []
+        };
+    }
+};
+
+// Get inventory statistics
+export const getInventoryStats = async () => {
+    try {
+        const inventory = await getInventory();
+        const sales = await getSales();
+
+        const totalItems = inventory.length;
+        const totalQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
+        const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        const totalCostValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
+        
+        const lowStockItems = await getLowStockItems();
+        const outOfStockItems = inventory.filter(item => item.quantity === 0);
+
+        // Recent sales (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const recentSales = sales.filter(sale => {
+            const saleDate = new Date(sale.timestamp);
+            return saleDate >= thirtyDaysAgo;
+        });
+
+        const totalSalesValue = recentSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
+        const totalProfit = recentSales.reduce((sum, sale) => sum + sale.profit, 0);
+
+        // Top selling items
+        const itemSales = {};
+        recentSales.forEach(sale => {
+            if (!itemSales[sale.itemId]) {
+                itemSales[sale.itemId] = {
+                    itemName: sale.itemName,
+                    totalQuantity: 0,
+                    totalValue: 0
+                };
+            }
+            itemSales[sale.itemId].totalQuantity += sale.quantity;
+            itemSales[sale.itemId].totalValue += sale.totalPrice;
+        });
+
+        const topSellingItems = Object.values(itemSales)
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
+            .slice(0, 5);
+
+        return {
+            inventory: {
+                totalItems,
+                totalQuantity,
+                totalValue,
+                totalCostValue,
+                potentialProfit: totalValue - totalCostValue
+            },
+            alerts: {
+                lowStockCount: lowStockItems.length,
+                outOfStockCount: outOfStockItems.length,
+                lowStockItems: lowStockItems.slice(0, 5), // Top 5 low stock items
+                outOfStockItems: outOfStockItems.slice(0, 5) // Top 5 out of stock items
+            },
+            sales: {
+                recentSalesCount: recentSales.length,
+                totalSalesValue,
+                totalProfit,
+                averageOrderValue: recentSales.length > 0 ? totalSalesValue / recentSales.length : 0
+            },
+            topSellingItems,
+            generatedAt: new Date().toISOString()
+        };
+
+    } catch (error) {
+        console.error('Error getting inventory stats:', error);
+        throw error;
+    }
+};

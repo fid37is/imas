@@ -1,7 +1,8 @@
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Package } from "lucide-react";
+import NotificationBell from "./NotificationBell";
 
 export default function Navbar({ activeView, setActiveView, user }) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -12,6 +13,12 @@ export default function Navbar({ activeView, setActiveView, user }) {
         } catch (error) {
             console.error("Error signing out:", error);
         }
+    };
+
+    const handleOrderSelect = (order) => {
+        // Handle order selection - you can implement this based on your needs
+        console.log("Selected order:", order);
+        setActiveView("orders");
     };
 
     return (
@@ -37,6 +44,15 @@ export default function Navbar({ activeView, setActiveView, user }) {
                     <div className="hidden sm:ml-6 sm:flex sm:items-center">
                         <div className="flex space-x-4">
                             <button
+                                onClick={() => setActiveView("dashboard")}
+                                className={`px-4 py-2 transition-colors text-white ${activeView === "dashboard"
+                                    ? "font-medium border-b-2 border-white"
+                                    : "hover:text-gray-300"
+                                    }`}
+                            >
+                                Dashboard
+                            </button>
+                            <button
                                 onClick={() => setActiveView("inventory")}
                                 className={`px-4 py-2 transition-colors text-white ${activeView === "inventory"
                                     ? "font-medium border-b-2 border-white"
@@ -46,32 +62,45 @@ export default function Navbar({ activeView, setActiveView, user }) {
                                 Inventory
                             </button>
                             <button
-                                onClick={() => setActiveView("dashboard")}
-                                className={`px-4 py-2 transition-colors text-white ${activeView === "dashboard"
+                                onClick={() => setActiveView("orders")}
+                                className={`px-4 py-2 transition-colors text-white flex items-center ${activeView === "orders"
                                     ? "font-medium border-b-2 border-white"
                                     : "hover:text-gray-300"
                                     }`}
                             >
-                                Dashboard
+                                <Package className="w-4 h-4 mr-1" />
+                                Orders
                             </button>
                         </div>
                     </div>
 
-                    {/* User and logout (hidden on mobile) */}
+                    {/* Notifications and User section (hidden on mobile) */}
                     <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
+                        {/* Notifications */}
+                        <NotificationBell 
+                            onOrderSelect={handleOrderSelect}
+                            setActiveView={setActiveView}
+                        />
+
                         <span className="text-sm text-gray-200">
                             {user.email}
                         </span>
                         <button
                             onClick={handleLogout}
-                            className="text-sm text-red-400 hover:text-red-300"
+                            className="text-sm text-red-400 hover:text-red-300 p-2 rounded-full hover:bg-blue-800 transition-colors"
                         >
-                            <LogOut />
+                            <LogOut className="w-4 h-4" />
                         </button>
                     </div>
 
                     {/* Mobile menu button */}
-                    <div className="flex items-center sm:hidden">
+                    <div className="flex items-center sm:hidden space-x-2">
+                        {/* Mobile Notifications */}
+                        <NotificationBell 
+                            onOrderSelect={handleOrderSelect}
+                            setActiveView={setActiveView}
+                        />
+
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                             className="inline-flex items-center justify-center p-2 rounded-md text-gray-200 hover:text-white hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
@@ -128,6 +157,19 @@ export default function Navbar({ activeView, setActiveView, user }) {
                             }`}
                     >
                         Inventory
+                    </button>
+                    <button
+                        onClick={() => {
+                            setActiveView("orders");
+                            setMobileMenuOpen(false);
+                        }}
+                        className={`flex items-center w-full text-left px-3 py-2 text-base font-medium ${activeView === "orders"
+                            ? "bg-blue-800 text-white"
+                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                            }`}
+                    >
+                        <Package className="w-4 h-4 mr-2" />
+                        Orders
                     </button>
                     <button
                         onClick={() => {
