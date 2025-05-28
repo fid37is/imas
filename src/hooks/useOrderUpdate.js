@@ -1,6 +1,21 @@
-// Inventory App - /hooks/useOrderUpdates.js
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { WEBSOCKET_CONFIG } from '../lib/websocket-config';
+import { io } from 'socket.io-client';
+
+// FIXED: WebSocket configuration
+const WEBSOCKET_CONFIG = {
+    INVENTORY_WS_URL: process.env.NEXT_PUBLIC_INVENTORY_WS_URL || 'http://localhost:3001',
+    EVENTS: {
+        NEW_ORDER: 'new_order',
+        ORDER_STATUS_UPDATE: 'order_status_update',
+        JOIN_ROOM: 'join_room',
+        LEAVE_ROOM: 'leave_room'
+    },
+    ROOMS: {
+        INVENTORY_ADMIN: 'inventory_admin'
+    },
+    MAX_RECONNECT_ATTEMPTS: 5,
+    RECONNECT_INTERVAL: 3000
+};
 
 export const useOrderUpdates = () => {
     const [orders, setOrders] = useState([]);
@@ -8,68 +23,13 @@ export const useOrderUpdates = () => {
     const [connectionStatus, setConnectionStatus] = useState('Closed');
     const [error, setError] = useState(null);
     const socketRef = useRef(null);
-    const reconnectTimeoutRef = useRef(null);
     const reconnectAttempts = useRef(0);
 
-    const connect = useCallback(() => {
-        try {
-            if (socketRef.current?.readyState === WebSocket.OPEN) {
-                return;
-            }
-
-            const ws = new WebSocket(WEBSOCKET_CONFIG.INVENTORY_WS_URL);
-            socketRef.current = ws;
-            setConnectionStatus('Connecting');
-
-            ws.onopen = () => {
-                console.log('Inventory WebSocket connected');
-                setConnectionStatus('Open');
-                setError(null);
-                reconnectAttempts.current = 0;
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    handleWebSocketMessage(message);
-                } catch (parseError) {
-                    console.error('Error parsing WebSocket message:', parseError);
-                    setError(parseError);
-                }
-            };
-
-            ws.onerror = (event) => {
-                console.error('Inventory WebSocket error:', event);
-                setConnectionStatus('Error');
-                setError(event);
-            };
-
-            ws.onclose = (event) => {
-                console.log('Inventory WebSocket closed:', event.code, event.reason);
-                setConnectionStatus('Closed');
-                socketRef.current = null;
-
-                // Attempt to reconnect
-                if (reconnectAttempts.current < WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS && !event.wasClean) {
-                    reconnectAttempts.current += 1;
-                    console.log(`Attempting to reconnect... (${reconnectAttempts.current}/${WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS})`);
-                    
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        connect();
-                    }, WEBSOCKET_CONFIG.RECONNECT_INTERVAL);
-                }
-            };
-
-        } catch (connectError) {
-            console.error('Error creating WebSocket connection:', connectError);
-            setError(connectError);
-            setConnectionStatus('Error');
-        }
-    }, [handleWebSocketMessage]);
-
     const handleWebSocketMessage = useCallback((message) => {
+        console.log('WebSocket message received:', message);
+        
         switch (message.type) {
-            case 'new_order':
+            case WEBSOCKET_CONFIG.EVENTS.NEW_ORDER:
                 console.log('New order received:', message.data);
                 setOrders(prevOrders => {
                     // Check if order already exists to prevent duplicates
@@ -88,7 +48,7 @@ export const useOrderUpdates = () => {
                 });
                 break;
 
-            case 'order_status_update':
+            case WEBSOCKET_CONFIG.EVENTS.ORDER_STATUS_UPDATE:
                 console.log('Order status updated:', message.data);
                 setOrders(prevOrders => 
                     prevOrders.map(order => 
@@ -108,6 +68,72 @@ export const useOrderUpdates = () => {
 
             default:
                 console.log('Unknown message type:', message.type);
+        }
+    }, []);
+
+    const connect = useCallback(() => {
+        try {
+            if (socketRef.current?.connected) {
+                return;
+            }
+
+            console.log('Connecting to WebSocket server...');
+            const socket = io(WEBSOCKET_CONFIG.INVENTORY_WS_URL, {
+                path: '/api/socket',
+                transports: ['websocket', 'polling']
+            });
+
+            socketRef.current = socket;
+            setConnectionStatus('Connecting');
+
+            socket.on('connect', () => {
+                console.log('WebSocket connected:', socket.id);
+                setConnectionStatus('Open');
+                setError(null);
+                reconnectAttempts.current = 0;
+
+                // Join the inventory admin room
+                socket.emit(WEBSOCKET_CONFIG.EVENTS.JOIN_ROOM, WEBSOCKET_CONFIG.ROOMS.INVENTORY_ADMIN);
+            });
+
+            socket.on('message', handleWebSocketMessage);
+
+            socket.on('room_joined', (data) => {
+                console.log('Joined room:', data);
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('WebSocket connection error:', error);
+                setConnectionStatus('Error');
+                setError(error);
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('WebSocket disconnected:', reason);
+                setConnectionStatus('Closed');
+
+                // Attempt to reconnect if not manually disconnected
+                if (reason !== 'io client disconnect' && reconnectAttempts.current < WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts.current += 1;
+                    console.log(`Attempting to reconnect... (${reconnectAttempts.current}/${WEBSOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS})`);
+                    
+                    setTimeout(() => {
+                        connect();
+                    }, WEBSOCKET_CONFIG.RECONNECT_INTERVAL);
+                }
+            });
+
+        } catch (connectError) {
+            console.error('Error creating WebSocket connection:', connectError);
+            setError(connectError);
+            setConnectionStatus('Error');
+        }
+    }, [handleWebSocketMessage]);
+
+    const disconnect = useCallback(() => {
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
         }
     }, []);
 
@@ -152,27 +178,6 @@ export const useOrderUpdates = () => {
         }
     }, []);
 
-    const resendOrderEmail = useCallback(async (order) => {
-        try {
-            const response = await fetch('/api/orders/resend-email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ order }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to resend email');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error('Error resending email:', error);
-            throw error;
-        }
-    }, []);
-
     const syncOrders = useCallback(async () => {
         try {
             const response = await fetch('/api/orders/sync');
@@ -200,16 +205,6 @@ export const useOrderUpdates = () => {
         setNewOrderAlerts([]);
     }, []);
 
-    const disconnect = useCallback(() => {
-        if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-        }
-        
-        if (socketRef.current) {
-            socketRef.current.close(1000, 'Manual disconnect');
-        }
-    }, []);
-
     // Initialize connection and sync orders on mount
     useEffect(() => {
         connect();
@@ -220,15 +215,6 @@ export const useOrderUpdates = () => {
         };
     }, [connect, disconnect, syncOrders]);
 
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
-        };
-    }, []);
-
     return {
         orders,
         setOrders,
@@ -237,55 +223,10 @@ export const useOrderUpdates = () => {
         error,
         isConnected: connectionStatus === 'Open',
         updateOrderStatus,
-        resendOrderEmail,
         syncOrders,
         clearAlert,
         clearAllAlerts,
         connect,
         disconnect
     };
-};
-
-// Hook for real-time order statistics
-export const useOrderStats = (orders) => {
-    const [stats, setStats] = useState({
-        total: 0,
-        pending: 0,
-        processing: 0,
-        fulfilled: 0,
-        cancelled: 0,
-        todayOrders: 0,
-        totalRevenue: 0
-    });
-
-    useEffect(() => {
-        const today = new Date().toDateString();
-        
-        const newStats = orders.reduce((acc, order) => {
-            acc.total += 1;
-            acc[order.status] = (acc[order.status] || 0) + 1;
-            
-            if (new Date(order.orderDate).toDateString() === today) {
-                acc.todayOrders += 1;
-            }
-            
-            if (order.status !== 'cancelled') {
-                acc.totalRevenue += parseFloat(order.total || 0);
-            }
-            
-            return acc;
-        }, {
-            total: 0,
-            pending: 0,
-            processing: 0,
-            fulfilled: 0,
-            cancelled: 0,
-            todayOrders: 0,
-            totalRevenue: 0
-        });
-
-        setStats(newStats);
-    }, [orders]);
-
-    return stats;
 };
