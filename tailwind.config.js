@@ -1,22 +1,23 @@
 /** @type {import('tailwindcss').Config} */
-export const content = [
+module.exports = {
+  content: [
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
-];
-export const theme = {
+  ],
+  theme: {
     extend: {
-        colors: {
-            primary: {
-                400: '#004099', // lighter blue
-                500: '#003380', // main blue
-                700: '#00205b', // darker blue
-            },
-            accent: {
-                400: '#ffcc66', // lighter gold
-                500: '#ffbb33', // main gold
-                600: '#F4B400', // darker gold
-            }
+      colors: {
+        primary: {
+          400: '#004099',
+          500: '#003380',
+          700: '#00205b',
         },
+        accent: {
+          400: '#ffcc66',
+          500: '#ffbb33',
+          600: '#F4B400',
+        },
+      },
     },
+  },
+  plugins: [],
 };
-
-export const plugins = [];

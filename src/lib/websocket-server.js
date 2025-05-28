@@ -1,8 +1,18 @@
 import { Server } from 'socket.io';
+import { createServer } from 'http';
 import { WEBSOCKET_CONFIG } from '../lib/websocket-config';
 
 let io = null;
+let httpServer = null;
 const rooms = new Map(); // Track rooms and their clients
+
+const autoInit = () => {
+    if (!io) {
+        httpServer = createServer();
+        httpServer.listen(3002, () => console.log('WebSocket server on port 3002'));
+        initializeWebSocketServer(httpServer);
+    }
+};
 
 // Initialize WebSocket server
 export const initializeWebSocketServer = (server) => {
@@ -75,6 +85,7 @@ export const initializeWebSocketServer = (server) => {
 
 // Broadcast message to a specific room
 export const broadcastToRoom = (room, data) => {
+    autoInit();
     if (!io) {
         console.error('❌ WebSocket server not initialized');
         return false;
