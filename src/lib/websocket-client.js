@@ -1,12 +1,13 @@
-// lib/websocket-client.js - Enhanced WebSocket client
+// lib/websocket-client.js - Socket.IO client (REPLACE your existing file)
+import { io } from 'socket.io-client';
+
 class WebSocketClient {
     constructor() {
-        this.ws = null;
+        this.socket = null;
         this.url = null;
         this.listeners = new Map();
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000;
         this.isConnecting = false;
         this.connectionStatus = {
             connected: false,
@@ -15,105 +16,101 @@ class WebSocketClient {
     }
 
     connect(url) {
-        if (this.isConnecting || (this.ws && this.ws.readyState === WebSocket.CONNECTING)) {
-            console.log('WebSocket connection already in progress');
+        if (this.isConnecting || (this.socket && this.socket.connected)) {
+            console.log('Socket.IO connection already established or in progress');
             return;
         }
 
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
-            return;
-        }
-
-        this.url = url;
+        // Convert ws:// to http:// for Socket.IO
+        const socketUrl = url.replace('ws://', 'http://');
+        this.url = socketUrl;
         this.isConnecting = true;
 
         try {
-            console.log(`🔌 Connecting to WebSocket: ${url}`);
-            this.ws = new WebSocket(url);
+            console.log(`🔌 Connecting to Socket.IO server: ${socketUrl}`);
+            
+            this.socket = io(socketUrl, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionAttempts: this.maxReconnectAttempts,
+                reconnectionDelay: 1000,
+                timeout: 10000
+            });
 
-            this.ws.onopen = () => {
-                console.log('✅ WebSocket connected successfully');
+            this.socket.on('connect', () => {
+                console.log('✅ Socket.IO connected successfully');
                 this.isConnecting = false;
                 this.reconnectAttempts = 0;
                 this.connectionStatus.connected = true;
                 this.connectionStatus.reconnectAttempts = 0;
                 
                 // Join the inventory_admin room
-                this.send('join_room', { room: 'inventory_admin' });
+                this.socket.emit('join_room', 'inventory_admin');
+                console.log('📡 Joined inventory_admin room');
                 
                 this.emit('connected', { connected: true });
-            };
+            });
 
-            this.ws.onclose = (event) => {
-                console.log('🔌 WebSocket connection closed:', event.code, event.reason);
+            this.socket.on('disconnect', (reason) => {
+                console.log('🔌 Socket.IO disconnected:', reason);
                 this.isConnecting = false;
                 this.connectionStatus.connected = false;
                 this.emit('disconnected', { connected: false });
+            });
 
-                // Auto-reconnect if not manually closed
-                if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.scheduleReconnect();
-                }
-            };
-
-            this.ws.onerror = (error) => {
-                console.error('❌ WebSocket error:', error);
+            this.socket.on('connect_error', (error) => {
+                console.error('❌ Socket.IO connection error:', error);
                 this.isConnecting = false;
+                this.reconnectAttempts++;
+                this.connectionStatus.reconnectAttempts = this.reconnectAttempts;
                 this.emit('error', { error });
-            };
+            });
 
-            this.ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('📨 WebSocket message received:', data);
-                    
-                    // Handle different message types
-                    if (data.type) {
-                        this.emit(data.type, data);
-                    }
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
+            // Listen for room confirmation
+            this.socket.on('room_joined', (data) => {
+                console.log('✅ Successfully joined room:', data);
+            });
+
+            // Listen for messages from server
+            this.socket.on('message', (data) => {
+                console.log('📨 Socket.IO message received:', data);
+                
+                // Emit the specific event type
+                if (data.type) {
+                    this.emit(data.type, data);
                 }
-            };
+            });
+
+            // Listen for pong responses
+            this.socket.on('pong', (data) => {
+                console.log('🏓 Pong received:', data);
+            });
 
         } catch (error) {
-            console.error('Failed to create WebSocket connection:', error);
+            console.error('Failed to create Socket.IO connection:', error);
             this.isConnecting = false;
-            this.scheduleReconnect();
         }
-    }
-
-    scheduleReconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
-            return;
-        }
-
-        this.reconnectAttempts++;
-        this.connectionStatus.reconnectAttempts = this.reconnectAttempts;
-        
-        const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1); // Exponential backoff
-        
-        console.log(`🔄 Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`);
-        
-        setTimeout(() => {
-            if (this.url) {
-                this.connect(this.url);
-            }
-        }, delay);
     }
 
     send(type, data = {}) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (this.socket && this.socket.connected) {
             const message = { type, ...data };
-            console.log('📤 Sending WebSocket message:', message);
-            this.ws.send(JSON.stringify(message));
+            console.log('📤 Sending Socket.IO message:', message);
+            this.socket.emit(type, data);
             return true;
         } else {
-            console.warn('WebSocket not connected, cannot send message:', type, data);
+            console.warn('Socket.IO not connected, cannot send message:', type, data);
             return false;
         }
+    }
+
+    // Send ping to test connection
+    ping() {
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('ping');
+            return true;
+        }
+        return false;
     }
 
     on(event, callback) {
@@ -146,24 +143,23 @@ class WebSocketClient {
     }
 
     disconnect() {
-        if (this.ws) {
-            console.log('🔌 Manually disconnecting WebSocket');
-            this.ws.close(1000, 'Manual disconnect');
-            this.ws = null;
+        if (this.socket) {
+            console.log('🔌 Manually disconnecting Socket.IO');
+            this.socket.disconnect();
+            this.socket = null;
         }
         this.connectionStatus.connected = false;
-        this.reconnectAttempts = this.maxReconnectAttempts; // Prevent auto-reconnect
     }
 
     getConnectionStatus() {
         return {
             ...this.connectionStatus,
-            readyState: this.ws ? this.ws.readyState : WebSocket.CLOSED
+            connected: this.socket ? this.socket.connected : false
         };
     }
 
     isConnected() {
-        return this.ws && this.ws.readyState === WebSocket.OPEN;
+        return this.socket && this.socket.connected;
     }
 }
 

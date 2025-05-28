@@ -9,7 +9,7 @@ const rooms = new Map(); // Track rooms and their clients
 const autoInit = () => {
     if (!io) {
         httpServer = createServer();
-        httpServer.listen(3002, () => console.log('WebSocket server on port 3002'));
+        httpServer.listen(3004, () => console.log('WebSocket server on port 3004'));
         initializeWebSocketServer(httpServer);
     }
 };
@@ -26,7 +26,7 @@ export const initializeWebSocketServer = (server) => {
             origin: [
                 "http://localhost:3000",
                 "http://localhost:3001",
-                "http://localhost:3002",
+                "http://localhost:3004",
                 process.env.STOREFRONT_URL,
                 process.env.INVENTORY_URL
             ].filter(Boolean), // remove undefined entries

@@ -143,7 +143,7 @@ export const NotificationProvider = ({ children }) => {
         console.log('🚀 Initializing notification system');
 
         // Connect to WebSocket server
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3002';
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3003';
         wsClient.connect(wsUrl);
 
         // Set up event listeners
@@ -198,7 +198,7 @@ export const NotificationProvider = ({ children }) => {
         console.log('🔄 Refreshing WebSocket connection');
         wsClient.disconnect();
         setTimeout(() => {
-            const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3002';
+            const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3004';
             wsClient.connect(wsUrl);
         }, 1000);
     }, []);

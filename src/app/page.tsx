@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { auth } from "./firebase/config";
 import { toast } from "sonner";
 // Import the correct functions from inventoryService
@@ -91,7 +92,6 @@ export default function Home() {
   const [salesData, setSalesData] = useState<SaleRecord[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
-  const [activeView, setActiveView] = useState<"inventory" | "dashboard" | "orders">("inventory");
   const [showLowStockAlert, setShowLowStockAlert] = useState<boolean>(false);
 
   interface RawInventoryItem {
@@ -349,61 +349,70 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar 
-        activeView={activeView} 
-        setActiveView={setActiveView} 
-        user={user} 
-      />
-      
-      {showLowStockAlert && lowStockItems.length > 0 && (
-        <div className="fixed top-16 right-0 m-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded shadow-md z-40 max-w-md">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold">Low Stock Alert</h3>
-            <button 
-              onClick={() => setShowLowStockAlert(false)} 
-              className="text-yellow-700 hover:text-yellow-900"
-            >
-              ×
-            </button>
+      <Router>
+      <div className="min-h-screen bg-gray-50">
+        <Navbar user={user} />
+        
+        {showLowStockAlert && lowStockItems.length > 0 && (
+          <div className="fixed top-16 right-0 m-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded shadow-md z-40 max-w-md">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold">Low Stock Alert</h3>
+              <button 
+                onClick={() => setShowLowStockAlert(false)} 
+                className="text-yellow-700 hover:text-yellow-900"
+              >
+                ×
+              </button>
+            </div>
+            <p className="mb-2">The following items need restocking:</p>
+            <ul className="list-disc pl-5">
+              {lowStockItems.map((item) => (
+                <li key={item.id}>
+                  {item.name}: {item.quantity} remaining
+                </li>
+              ))}
+            </ul>
           </div>
-          <p className="mb-2">The following items need restocking:</p>
-          <ul className="list-disc pl-5">
-            {lowStockItems.map((item) => (
-              <li key={item.id}>
-                {item.name}: {item.quantity} remaining
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      
-      <div className="container mx-auto py-6 px-4">
-        {activeView === "inventory" && (
-          <InventoryPage 
-            inventory={inventory}
-            setInventory={setInventory}
-            onSellItem={handleSellItem}
-          />
         )}
         
-        {activeView === "dashboard" && (
-          <Dashboard 
-            salesData={salesData} 
-            inventory={inventory}
-          />
-        )}
-
-        {activeView === "orders" && (
-          <OrderManagement 
-            orders={orders}
-            setOrders={setOrders}
-            onUpdateOrderStatus={handleUpdateOrderStatus}
-            onResendEmail={handleResendEmail}
-            inventory={inventory}
-          />
-        )}
+        <div className="container mx-auto py-6 px-4">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route 
+              path="/dashboard" 
+              element={
+                <Dashboard 
+                  salesData={salesData} 
+                  inventory={inventory}
+                />
+              } 
+            />
+            <Route 
+              path="/inventory" 
+              element={
+                <InventoryPage 
+                  inventory={inventory}
+                  setInventory={setInventory}
+                  onSellItem={handleSellItem}
+                />
+              } 
+            />
+            <Route 
+              path="/orders" 
+              element={
+                <OrderManagement 
+                  orders={orders}
+                  setOrders={setOrders}
+                  onUpdateOrderStatus={handleUpdateOrderStatus}
+                  onResendEmail={handleResendEmail}
+                  inventory={inventory}
+                />
+              } 
+            />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </div>
       </div>
-    </div>
+    </Router>
   );
 }

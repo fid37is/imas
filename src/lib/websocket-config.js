@@ -3,7 +3,7 @@
 
 export const WEBSOCKET_CONFIG = {
     // Use environment variable or fallback to localhost
-    INVENTORY_WS_URL: process.env.INVENTORY_WEBSOCKET_URL || 'ws://localhost:3001',
+    INVENTORY_WS_URL: process.env.INVENTORY_WEBSOCKET_URL || 'ws://localhost:3004',
     STOREFRONT_WS_URL: process.env.STOREFRONT_WEBSOCKET_URL || 'ws://localhost:3000',
     
     // WebSocket events
@@ -32,6 +32,8 @@ export const WEBSOCKET_CONFIG = {
 
 export const WEBHOOK_CONFIG = {
     // Webhook URLs - set these in your environment variables
+
     INVENTORY_WEBHOOK_URL: process.env.INVENTORY_WEBHOOK_URL || 'http://localhost:3001/api/orders/receive-webhook',
     WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || 'your-webhook-secret-key'
 };
+

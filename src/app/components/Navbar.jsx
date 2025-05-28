@@ -1,11 +1,14 @@
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase/config";
 import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Package } from "lucide-react";
 import NotificationBell from "./NotificationBell";
 
-export default function Navbar({ activeView, setActiveView, user }) {
+export default function Navbar({ user }) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const navigate = useNavigate();
+    const location = useLocation();
 
     const handleLogout = async () => {
         try {
@@ -18,7 +21,18 @@ export default function Navbar({ activeView, setActiveView, user }) {
     const handleOrderSelect = (order) => {
         // Handle order selection - you can implement this based on your needs
         console.log("Selected order:", order);
-        setActiveView("orders");
+        navigate("/orders");
+    };
+
+    // Function to determine if a route is active
+    const isActiveRoute = (path) => {
+        return location.pathname === path;
+    };
+
+    // Function to navigate to a route
+    const navigateTo = (path) => {
+        navigate(path);
+        setMobileMenuOpen(false); // Close mobile menu after navigation
     };
 
     return (
@@ -44,29 +58,32 @@ export default function Navbar({ activeView, setActiveView, user }) {
                     <div className="hidden sm:ml-6 sm:flex sm:items-center">
                         <div className="flex space-x-4">
                             <button
-                                onClick={() => setActiveView("dashboard")}
-                                className={`px-4 py-2 transition-colors text-white ${activeView === "dashboard"
-                                    ? "font-medium border-b-2 border-white"
-                                    : "hover:text-gray-300"
-                                    }`}
+                                onClick={() => navigateTo("/dashboard")}
+                                className={`px-4 py-2 transition-colors text-white ${
+                                    isActiveRoute("/dashboard")
+                                        ? "font-medium border-b-2 border-white"
+                                        : "hover:text-gray-300"
+                                }`}
                             >
                                 Dashboard
                             </button>
                             <button
-                                onClick={() => setActiveView("inventory")}
-                                className={`px-4 py-2 transition-colors text-white ${activeView === "inventory"
-                                    ? "font-medium border-b-2 border-white"
-                                    : "hover:text-gray-300"
-                                    }`}
+                                onClick={() => navigateTo("/inventory")}
+                                className={`px-4 py-2 transition-colors text-white ${
+                                    isActiveRoute("/inventory")
+                                        ? "font-medium border-b-2 border-white"
+                                        : "hover:text-gray-300"
+                                }`}
                             >
                                 Inventory
                             </button>
                             <button
-                                onClick={() => setActiveView("orders")}
-                                className={`px-4 py-2 transition-colors text-white flex items-center ${activeView === "orders"
-                                    ? "font-medium border-b-2 border-white"
-                                    : "hover:text-gray-300"
-                                    }`}
+                                onClick={() => navigateTo("/orders")}
+                                className={`px-4 py-2 transition-colors text-white flex items-center ${
+                                    isActiveRoute("/orders")
+                                        ? "font-medium border-b-2 border-white"
+                                        : "hover:text-gray-300"
+                                }`}
                             >
                                 <Package className="w-4 h-4 mr-1" />
                                 Orders
@@ -79,7 +96,7 @@ export default function Navbar({ activeView, setActiveView, user }) {
                         {/* Notifications */}
                         <NotificationBell 
                             onOrderSelect={handleOrderSelect}
-                            setActiveView={setActiveView}
+                            setActiveView={(view) => navigate(`/${view}`)}
                         />
 
                         <span className="text-sm text-gray-200">
@@ -98,7 +115,7 @@ export default function Navbar({ activeView, setActiveView, user }) {
                         {/* Mobile Notifications */}
                         <NotificationBell 
                             onOrderSelect={handleOrderSelect}
-                            setActiveView={setActiveView}
+                            setActiveView={(view) => navigate(`/${view}`)}
                         />
 
                         <button
@@ -147,41 +164,35 @@ export default function Navbar({ activeView, setActiveView, user }) {
             <div className={`${mobileMenuOpen ? 'block' : 'hidden'} sm:hidden bg-blue-900`}>
                 <div className="pt-2 pb-3 space-y-1">
                     <button
-                        onClick={() => {
-                            setActiveView("inventory");
-                            setMobileMenuOpen(false);
-                        }}
-                        className={`block w-full text-left px-3 py-2 text-base font-medium ${activeView === "inventory"
-                            ? "bg-blue-800 text-white"
-                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
-                            }`}
+                        onClick={() => navigateTo("/dashboard")}
+                        className={`block w-full text-left px-3 py-2 text-base font-medium ${
+                            isActiveRoute("/dashboard")
+                                ? "bg-blue-800 text-white"
+                                : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                        }`}
+                    >
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={() => navigateTo("/inventory")}
+                        className={`block w-full text-left px-3 py-2 text-base font-medium ${
+                            isActiveRoute("/inventory")
+                                ? "bg-blue-800 text-white"
+                                : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                        }`}
                     >
                         Inventory
                     </button>
                     <button
-                        onClick={() => {
-                            setActiveView("orders");
-                            setMobileMenuOpen(false);
-                        }}
-                        className={`flex items-center w-full text-left px-3 py-2 text-base font-medium ${activeView === "orders"
-                            ? "bg-blue-800 text-white"
-                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
-                            }`}
+                        onClick={() => navigateTo("/orders")}
+                        className={`flex items-center w-full text-left px-3 py-2 text-base font-medium ${
+                            isActiveRoute("/orders")
+                                ? "bg-blue-800 text-white"
+                                : "text-gray-200 hover:bg-blue-800 hover:text-white"
+                        }`}
                     >
                         <Package className="w-4 h-4 mr-2" />
                         Orders
-                    </button>
-                    <button
-                        onClick={() => {
-                            setActiveView("dashboard");
-                            setMobileMenuOpen(false);
-                        }}
-                        className={`block w-full text-left px-3 py-2 text-base font-medium ${activeView === "dashboard"
-                            ? "bg-blue-800 text-white"
-                            : "text-gray-200 hover:bg-blue-800 hover:text-white"
-                            }`}
-                    >
-                        Dashboard
                     </button>
                 </div>
                 <div className="pt-4 pb-3 border-t border-blue-800">
