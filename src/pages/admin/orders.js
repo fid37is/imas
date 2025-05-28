@@ -1,8 +1,7 @@
 // Inventory App - /pages/admin/orders.js
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import OrderManagement from '../../components/OrderManagement';
-import { getRowsFromSheet } from '../../lib/environmentAwareClientSheetsService';
+import OrderManagement from '../../app/components/OrderManagement';
 import { useOrderUpdates } from '../../hooks/useOrderUpdates';
 
 const AdminOrdersPage = () => {
