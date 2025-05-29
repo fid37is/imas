@@ -675,3 +675,472 @@ export const getInventoryStats = async () => {
         throw error;
     }
 };
+
+// Sheet configuration for orders
+const ORDERS_SHEET_RANGE = 'Orders!A:Z';
+const ORDER_ITEMS_SHEET_RANGE = 'OrderItems!A:Z';
+
+// Get all orders
+export const getOrders = async () => {
+    try {
+        const rows = await getRowsFromSheet(ORDERS_SHEET_RANGE);
+
+        if (!rows || rows.length === 0) {
+            return [];
+        }
+
+        // Skip header row and map to objects
+        const orders = rows.slice(1).map((row) => {
+            // Ensure row is an array
+            const safeRow = Array.isArray(row) ? row : [];
+
+            return {
+                orderId: safeRow[0] || '',
+                userId: safeRow[1] || '',
+                orderDate: safeRow[2] || '',
+                status: safeRow[3] || '',
+                totalAmount: safeParseFloat(safeRow[4], 0),
+                shippingFee: safeParseFloat(safeRow[5], 0),
+                paymentMethod: safeRow[6] || '',
+                currency: safeRow[7] || '',
+                isAuthenticated: safeRow[8] === 'TRUE' || safeRow[8] === true,
+                isGuestCheckout: safeRow[9] === 'TRUE' || safeRow[9] === true,
+                customerFirstName: safeRow[10] || '',
+                customerLastName: safeRow[11] || '',
+                customerEmail: safeRow[12] || '',
+                customerPhone: safeRow[13] || '',
+                shippingAddress: safeRow[14] || '',
+                city: safeRow[15] || '',
+                state: safeRow[16] || '',
+                lga: safeRow[17] || '',
+                town: safeRow[18] || '',
+                zip: safeRow[19] || '',
+                additionalInfo: safeRow[20] || '',
+                createdAt: safeRow[21] || new Date().toISOString(),
+                updatedAt: safeRow[22] || new Date().toISOString(),
+            };
+        });
+
+        return orders;
+    } catch (error) {
+        console.error('Error getting orders:', error);
+        throw error;
+    }
+};
+
+// Get all order items
+export const getOrderItems = async () => {
+    try {
+        const rows = await getRowsFromSheet(ORDER_ITEMS_SHEET_RANGE);
+
+        if (!rows || rows.length === 0) {
+            return [];
+        }
+
+        // Skip header row and map to objects
+        const orderItems = rows.slice(1).map((row) => {
+            // Ensure row is an array
+            const safeRow = Array.isArray(row) ? row : [];
+
+            return {
+                orderId: safeRow[0] || '',
+                productId: safeRow[1] || '',
+                productName: safeRow[2] || '',
+                quantity: safeParseInt(safeRow[3], 0),
+                price: safeParseFloat(safeRow[4], 0),
+                imageUrl: safeRow[5] || '',
+            };
+        });
+
+        return orderItems;
+    } catch (error) {
+        console.error('Error getting order items:', error);
+        throw error;
+    }
+};
+
+// Get orders with their items (combined data)
+export const getOrdersWithItems = async () => {
+    try {
+        const [orders, orderItems] = await Promise.all([
+            getOrders(),
+            getOrderItems()
+        ]);
+
+        // Group order items by orderId
+        const itemsByOrderId = orderItems.reduce((acc, item) => {
+            if (!acc[item.orderId]) {
+                acc[item.orderId] = [];
+            }
+            acc[item.orderId].push(item);
+            return acc;
+        }, {});
+
+        // Combine orders with their items
+        const ordersWithItems = orders.map(order => ({
+            ...order,
+            items: itemsByOrderId[order.orderId] || []
+        }));
+
+        return ordersWithItems;
+    } catch (error) {
+        console.error('Error getting orders with items:', error);
+        throw error;
+    }
+};
+
+// Get order by ID
+export const getOrderById = async (orderId) => {
+    try {
+        const orders = await getOrdersWithItems();
+        const order = orders.find(o => o.orderId === orderId);
+        
+        if (!order) {
+            throw new Error(`Order with ID ${orderId} not found`);
+        }
+        
+        return order;
+    } catch (error) {
+        console.error('Error getting order by ID:', error);
+        throw error;
+    }
+};
+
+// Get orders by status
+export const getOrdersByStatus = async (status) => {
+    try {
+        const orders = await getOrdersWithItems();
+        return orders.filter(order => order.status.toLowerCase() === status.toLowerCase());
+    } catch (error) {
+        console.error('Error getting orders by status:', error);
+        throw error;
+    }
+};
+
+// Get orders by user ID
+export const getOrdersByUserId = async (userId) => {
+    try {
+        const orders = await getOrdersWithItems();
+        return orders.filter(order => order.userId === userId);
+    } catch (error) {
+        console.error('Error getting orders by user ID:', error);
+        throw error;
+    }
+};
+
+// Get orders by date range
+export const getOrdersByDateRange = async (startDate, endDate) => {
+    try {
+        const orders = await getOrdersWithItems();
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        return orders.filter(order => {
+            const orderDate = new Date(order.orderDate);
+            return orderDate >= start && orderDate <= end;
+        });
+    } catch (error) {
+        console.error('Error getting orders by date range:', error);
+        throw error;
+    }
+};
+
+// Get recent orders (last N days)
+export const getRecentOrders = async (days = 30) => {
+    try {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+        
+        return await getOrdersByDateRange(startDate.toISOString(), endDate.toISOString());
+    } catch (error) {
+        console.error('Error getting recent orders:', error);
+        throw error;
+    }
+};
+
+// Get order statistics
+export const getOrderStats = async () => {
+    try {
+        const orders = await getOrdersWithItems();
+        
+        const totalOrders = orders.length;
+        const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+        const totalShippingFees = orders.reduce((sum, order) => sum + order.shippingFee, 0);
+        
+        // Orders by status
+        const ordersByStatus = orders.reduce((acc, order) => {
+            const status = order.status.toLowerCase();
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+        }, {});
+        
+        // Recent orders (last 30 days)
+        const recentOrders = await getRecentOrders(30);
+        const recentRevenue = recentOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+        
+        // Average order value
+        const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+        const recentAverageOrderValue = recentOrders.length > 0 ? recentRevenue / recentOrders.length : 0;
+        
+        // Payment methods breakdown
+        const paymentMethods = orders.reduce((acc, order) => {
+            const method = order.paymentMethod || 'Unknown';
+            acc[method] = (acc[method] || 0) + 1;
+            return acc;
+        }, {});
+        
+        // Top selling products from order items
+        const allOrderItems = orders.flatMap(order => order.items);
+        const productSales = allOrderItems.reduce((acc, item) => {
+            if (!acc[item.productId]) {
+                acc[item.productId] = {
+                    productId: item.productId,
+                    productName: item.productName,
+                    totalQuantity: 0,
+                    totalRevenue: 0,
+                    orderCount: 0
+                };
+            }
+            acc[item.productId].totalQuantity += item.quantity;
+            acc[item.productId].totalRevenue += item.price * item.quantity;
+            acc[item.productId].orderCount += 1;
+            return acc;
+        }, {});
+        
+        const topSellingProducts = Object.values(productSales)
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
+            .slice(0, 10);
+        
+        return {
+            overview: {
+                totalOrders,
+                totalRevenue,
+                totalShippingFees,
+                averageOrderValue,
+                totalItemsSold: allOrderItems.reduce((sum, item) => sum + item.quantity, 0)
+            },
+            recent: {
+                ordersCount: recentOrders.length,
+                revenue: recentRevenue,
+                averageOrderValue: recentAverageOrderValue
+            },
+            ordersByStatus,
+            paymentMethods,
+            topSellingProducts,
+            generatedAt: new Date().toISOString()
+        };
+    } catch (error) {
+        console.error('Error getting order stats:', error);
+        throw error;
+    }
+};
+
+// Helper function to find the row number for a specific orderId
+const findOrderRowNumber = async (orderId) => {
+    try {
+        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+        
+        // Get all order IDs from column A (excluding header)
+        const response = await fetch('/api/sheets/getRange', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sheetId: SHEET_ID,
+                range: 'Orders!A:A' // Get all values in column A
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch order data: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        const orderIds = result.values || [];
+        
+        // Find the row index (add 1 because sheets are 1-indexed, add 1 more to skip header)
+        const rowIndex = orderIds.findIndex((row, index) => 
+            index > 0 && row[0] === orderId // Skip header row (index 0)
+        );
+        
+        if (rowIndex === -1) {
+            throw new Error(`Order ID ${orderId} not found`);
+        }
+        
+        return rowIndex + 1; // Convert to 1-based indexing
+    } catch (error) {
+        console.error('Error finding order row:', error);
+        throw error;
+    }
+};
+
+export const updateOrderStatusInSheet = async (orderId, newStatus) => {
+    try {
+        const response = await fetch('/api/orders/update-status', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                orderId: orderId,
+                status: newStatus
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Update failed');
+        }
+        
+        return result;
+    } catch (error) {
+        console.error('Error updating order status:', error);
+        throw error;
+    }
+};
+
+// Complete implementation using your existing generic updateRow API
+export const updateOrderStatusInSheetGeneric = async (orderId, newStatus) => {
+    try {
+        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+        
+        if (!SHEET_ID) {
+            throw new Error('Google Sheet ID not found in environment variables');
+        }
+        
+        // Find the row number for the given orderId
+        const rowNumber = await findOrderRowNumber(orderId);
+        
+        // Status is in column D (4th column) based on your header structure
+        const range = `Orders!D${rowNumber}`;
+        
+        const response = await fetch('/api/sheets/updateRow', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sheetId: SHEET_ID,
+                range: range,
+                values: [newStatus]
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result;
+    } catch (error) {
+        console.error('Error updating order status with generic API:', error);
+        throw error;
+    }
+};
+
+// Alternative implementation that updates both status and updatedAt timestamp
+export const updateOrderStatusWithTimestamp = async (orderId, newStatus) => {
+    try {
+        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+        
+        if (!SHEET_ID) {
+            throw new Error('Google Sheet ID not found in environment variables');
+        }
+        
+        const rowNumber = await findOrderRowNumber(orderId);
+        const currentTimestamp = new Date().toISOString();
+        
+        // Update both status (column D) and updatedAt (column W) based on your headers
+        const statusRange = `Orders!D${rowNumber}`;
+        const timestampRange = `Orders!W${rowNumber}`;
+        
+        // Update status
+        const statusResponse = await fetch('/api/sheets/updateRow', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sheetId: SHEET_ID,
+                range: statusRange,
+                values: [newStatus]
+            })
+        });
+        
+        if (!statusResponse.ok) {
+            throw new Error(`Failed to update status: ${statusResponse.status}`);
+        }
+        
+        // Update timestamp
+        const timestampResponse = await fetch('/api/sheets/updateRow', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                sheetId: SHEET_ID,
+                range: timestampRange,
+                values: [currentTimestamp]
+            })
+        });
+        
+        if (!timestampResponse.ok) {
+            throw new Error(`Failed to update timestamp: ${timestampResponse.status}`);
+        }
+        
+        return {
+            success: true,
+            message: 'Order status and timestamp updated successfully',
+            orderId,
+            newStatus,
+            updatedAt: currentTimestamp
+        };
+    } catch (error) {
+        console.error('Error updating order status with timestamp:', error);
+        throw error;
+    }
+};
+
+// Batch update function if you need to update multiple orders
+export const batchUpdateOrderStatus = async (updates) => {
+    try {
+        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+        
+        if (!SHEET_ID) {
+            throw new Error('Google Sheet ID not found in environment variables');
+        }
+        
+        const results = [];
+        
+        for (const update of updates) {
+            try {
+                const result = await updateOrderStatusInSheetGeneric(update.orderId, update.newStatus);
+                results.push({
+                    orderId: update.orderId,
+                    success: true,
+                    result
+                });
+            } catch (error) {
+                results.push({
+                    orderId: update.orderId,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+        
+        return results;
+    } catch (error) {
+        console.error('Error in batch update:', error);
+        throw error;
+    }
+};
