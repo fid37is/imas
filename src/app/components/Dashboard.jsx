@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Chart } from "chart.js/auto";
+import { Calendar } from "lucide-react";
 
 const currencyFormatter = new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -17,52 +18,68 @@ export default function Dashboard({ inventory, salesData }) {
     const [topSellingItems, setTopSellingItems] = useState([]);
     const [categoryDistribution, setCategoryDistribution] = useState([]);
     const [activeTab, setActiveTab] = useState('overview');
-    const [dateFilter, setDateFilter] = useState('all');
+    const [dateRange, setDateRange] = useState('all');
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
     const [filteredSalesData, setFilteredSalesData] = useState([]);
     const [chartsInitialized, setChartsInitialized] = useState(false);
     const [isDataLoading, setIsDataLoading] = useState(true);
 
-    // Initialize and retrieve user preferences from localStorage
+    // Initialize and retrieve user preferences
     useEffect(() => {
         // Check if we're in a browser environment
         if (typeof window !== 'undefined') {
-            // Retrieve active tab from localStorage if available
-            const savedTab = localStorage.getItem('dashboardActiveTab');
+            // Retrieve active tab if available
+            const savedTab = sessionStorage.getItem('dashboardActiveTab');
             if (savedTab) {
                 setActiveTab(savedTab);
             }
 
-            // Retrieve date filter from localStorage if available
-            const savedDateFilter = localStorage.getItem('dashboardDateFilter');
+            // Retrieve date filter if available
+            const savedDateFilter = sessionStorage.getItem('dashboardDateFilter');
             if (savedDateFilter) {
-                setDateFilter(savedDateFilter);
+                setDateRange(savedDateFilter);
             }
+
+            // Retrieve custom dates if available
+            const savedStartDate = sessionStorage.getItem('dashboardCustomStartDate');
+            const savedEndDate = sessionStorage.getItem('dashboardCustomEndDate');
+            if (savedStartDate) setCustomStartDate(savedStartDate);
+            if (savedEndDate) setCustomEndDate(savedEndDate);
 
             // Signal data is now loaded
             setIsDataLoading(false);
         }
     }, []);
 
-    // Save active tab to localStorage whenever it changes
+    // Save active tab whenever it changes
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('dashboardActiveTab', activeTab);
+            sessionStorage.setItem('dashboardActiveTab', activeTab);
         }
     }, [activeTab]);
 
-    // Save date filter to localStorage whenever it changes
+    // Save date filter whenever it changes
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('dashboardDateFilter', dateFilter);
+            sessionStorage.setItem('dashboardDateFilter', dateRange);
         }
-    }, [dateFilter]);
+    }, [dateRange]);
+
+    // Save custom dates whenever they change
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            sessionStorage.setItem('dashboardCustomStartDate', customStartDate);
+            sessionStorage.setItem('dashboardCustomEndDate', customEndDate);
+        }
+    }, [customStartDate, customEndDate]);
 
     // Apply date filter whenever it changes or salesData changes
     useEffect(() => {
         if (Array.isArray(salesData)) {
             applyDateFilter();
         }
-    }, [dateFilter, salesData]);
+    }, [dateRange, salesData, customStartDate, customEndDate]);
 
     // Calculate metrics whenever filtered data or inventory changes
     useEffect(() => {
@@ -113,43 +130,82 @@ export default function Dashboard({ inventory, salesData }) {
             return;
         }
 
-        if (dateFilter === 'all') {
+        if (dateRange === 'all') {
             setFilteredSalesData(salesData);
             return;
         }
 
         const now = new Date();
-        let startDate;
+        let startDate, endDate;
 
-        switch (dateFilter) {
-            case 'today':
-                startDate = new Date(now);
-                startDate.setHours(0, 0, 0, 0);
-                break;
-            case 'week':
-                startDate = new Date(now);
-                startDate.setDate(now.getDate() - 7);
-                break;
-            case 'month':
-                startDate = new Date(now);
-                startDate.setMonth(now.getMonth() - 1);
-                break;
-            case 'quarter':
-                startDate = new Date(now);
-                startDate.setMonth(now.getMonth() - 3);
-                break;
-            case 'year':
-                startDate = new Date(now);
-                startDate.setFullYear(now.getFullYear() - 1);
-                break;
-            default:
-                startDate = new Date(0); // Beginning of time
+        if (dateRange === 'custom') {
+            // Handle custom date range
+            if (!customStartDate && !customEndDate) {
+                setFilteredSalesData(salesData);
+                return;
+            }
+
+            startDate = customStartDate ? new Date(customStartDate) : new Date(0);
+            endDate = customEndDate ? new Date(customEndDate) : now;
+
+            // Set end date to end of day for better inclusivity
+            if (customEndDate) {
+                endDate.setHours(23, 59, 59, 999);
+            }
+        } else {
+            // Handle predefined date ranges
+            switch (dateRange) {
+                case 'today':
+                    startDate = new Date(now);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date(now);
+                    endDate.setHours(23, 59, 59, 999);
+                    break;
+                case 'yesterday':
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - 1);
+                    startDate.setHours(0, 0, 0, 0);
+                    endDate = new Date(now);
+                    endDate.setDate(now.getDate() - 1);
+                    endDate.setHours(23, 59, 59, 999);
+                    break;
+                case 'week':
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - 7);
+                    endDate = now;
+                    break;
+                case 'month':
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - 30);
+                    endDate = now;
+                    break;
+                case '3months':
+                    startDate = new Date(now);
+                    startDate.setDate(now.getDate() - 90);
+                    endDate = now;
+                    break;
+                case 'quarter':
+                    startDate = new Date(now);
+                    startDate.setMonth(now.getMonth() - 3);
+                    endDate = now;
+                    break;
+                case 'year':
+                    startDate = new Date(now);
+                    startDate.setFullYear(now.getFullYear() - 1);
+                    endDate = now;
+                    break;
+                default:
+                    startDate = new Date(0); // Beginning of time
+                    endDate = now;
+            }
         }
 
         const filtered = salesData.filter(sale => {
             // Handle both timestamp and date fields
             const saleDate = new Date(sale.timestamp || sale.date);
-            return !isNaN(saleDate.getTime()) && saleDate >= startDate;
+            if (isNaN(saleDate.getTime())) return false;
+
+            return saleDate >= startDate && saleDate <= endDate;
         });
 
         setFilteredSalesData(filtered);
@@ -316,6 +372,32 @@ export default function Dashboard({ inventory, salesData }) {
         return isNaN(num) ? '₦0.00' : currencyFormatter.format(num);
     };
 
+    const getDateRangeLabel = () => {
+        if (dateRange === 'custom') {
+            if (customStartDate && customEndDate) {
+                return `${new Date(customStartDate).toLocaleDateString()} - ${new Date(customEndDate).toLocaleDateString()}`;
+            } else if (customStartDate) {
+                return `From ${new Date(customStartDate).toLocaleDateString()}`;
+            } else if (customEndDate) {
+                return `Until ${new Date(customEndDate).toLocaleDateString()}`;
+            }
+            return 'Custom Range';
+        }
+
+        const labels = {
+            'all': 'All Time',
+            'today': 'Today',
+            'yesterday': 'Yesterday',
+            'week': 'Last 7 Days',
+            'month': 'Last 30 Days',
+            '3months': 'Last 3 Months',
+            'quarter': 'Last Quarter',
+            'year': 'Last Year'
+        };
+
+        return labels[dateRange] || 'Selected Period';
+    };
+
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -355,30 +437,78 @@ export default function Dashboard({ inventory, salesData }) {
                         </div>
                     </div>
 
-                    {/* Date Filter Dropdown */}
+                    {/* Date Range Selector with Calendar Icon */}
                     <div className="w-full sm:w-auto">
-                        <div className="relative inline-block w-full">
+                        <div className="relative">
+                            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                             <select
-                                value={dateFilter}
-                                onChange={(e) => setDateFilter(e.target.value)}
-                                className="block appearance-none w-full bg-white border border-gray-300 hover:border-primary-500 px-4 py-2 pr-8 rounded shadow leading-tight focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                className="pl-10 pr-8 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-accent-500 focus:border-transparent"
+                                value={dateRange}
+                                onChange={(e) => setDateRange(e.target.value)}
                             >
                                 <option value="all">All Time</option>
                                 <option value="today">Today</option>
+                                <option value="yesterday">Yesterday</option>
                                 <option value="week">Last 7 Days</option>
-                                <option value="month">Last Month</option>
-                                <option value="quarter">Last Quarter</option>
-                                <option value="year">Last Year</option>
+                                <option value="month">Last 30 Days</option>
+                                <option value="3months">Last 3 Months</option>
+                                <option value="custom">Custom Range</option>
                             </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                    <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                                </svg>
-                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* Custom Date Range Inputs */}
+                {dateRange === 'custom' && (
+                    <div className="w-full flex flex-col sm:flex-row gap-3 mt-4 p-4 bg-gray-50 rounded-lg border">
+                        <div className="flex-1">
+                            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
+                                Start Date
+                            </label>
+                            <input
+                                type="date"
+                                id="startDate"
+                                value={customStartDate}
+                                onChange={(e) => setCustomStartDate(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-accent-500 focus:border-transparent"
+                                max={customEndDate || new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
+                        <div className="flex-1">
+                            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
+                                End Date
+                            </label>
+                            <input
+                                type="date"
+                                id="endDate"
+                                value={customEndDate}
+                                onChange={(e) => setCustomEndDate(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-accent-500 focus:border-transparent"
+                                min={customStartDate}
+                                max={new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
+                        <div className="flex items-end">
+                            <button
+                                onClick={() => {
+                                    setCustomStartDate('');
+                                    setCustomEndDate('');
+                                }}
+                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {/* Date Range Display */}
+            {dateRange !== 'all' && (
+                <div className="mb-4 text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-md border border-blue-200">
+                    <span className="font-medium">Showing data for:</span> {getDateRangeLabel()}
+                </div>
+            )}
 
             {/* KPI Cards - Always visible on all tabs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -406,7 +536,7 @@ export default function Dashboard({ inventory, salesData }) {
                         <p className="text-xl font-bold text-primary-600">{formatCurrency(totalSales)}</p>
                         <p className="text-sm text-gray-500 mt-1">
                             {filteredSalesData.length} {filteredSalesData.length === 1 ? 'transaction' : 'transactions'}
-                            {dateFilter !== 'all' && " in selected period"}
+                            {dateRange !== 'all' && " in selected period"}
                         </p>
                     </div>
                 </div>
@@ -421,7 +551,7 @@ export default function Dashboard({ inventory, salesData }) {
                         <h3 className="text-gray-500 text-sm font-medium">Total Profit</h3>
                         <p className="text-xl font-bold text-accent-600">{formatCurrency(profit)}</p>
                         <p className="text-sm text-gray-500 mt-1">
-                            {dateFilter !== 'all' ? `For selected period` : 'From all sales'}
+                            {dateRange !== 'all' ? `For selected period` : 'From all sales'}
                         </p>
                     </div>
                 </div>
@@ -460,11 +590,8 @@ export default function Dashboard({ inventory, salesData }) {
                                 ) : (
                                     <div className="flex items-center justify-center h-full">
                                         <p className="text-gray-500">
-                                            {dateFilter !== 'all'
-                                                ? `No sales data available for the ${dateFilter === 'today' ? 'current day' :
-                                                    dateFilter === 'week' ? 'last 7 days' :
-                                                        dateFilter === 'month' ? 'last month' :
-                                                            dateFilter === 'quarter' ? 'last quarter' : 'last year'}`
+                                            {dateRange !== 'all'
+                                                ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
                                                 : 'No sales data available'}
                                         </p>
                                     </div>
@@ -523,13 +650,12 @@ export default function Dashboard({ inventory, salesData }) {
                     ) : (
                         <div className="text-gray-500 text-center py-12">
                             <svg className="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17l6-6-6-6" />
-                            </svg>
-                            <h3 className="mt-2 text-sm font-medium text-gray-900">No sales data</h3>
-                            <p className="mt-1 text-sm text-gray-500">
-                                {dateFilter !== 'all'
-                                    ? `No sales recorded for the selected time period.`
-                                    : 'Start selling to see your top products.'}
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17l6-6-6-6" /></svg>
+                            <p className="mt-2">
+                                {dateRange !== 'all'
+                                    ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
+                                    : 'No sales data available'
+                                }
                             </p>
                         </div>
                     )}
@@ -538,116 +664,72 @@ export default function Dashboard({ inventory, salesData }) {
 
             {/* Inventory Tab Content */}
             {activeTab === 'inventory' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Low Stock Items */}
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-lg font-medium text-primary-600">Low Stock Items</h3>
-                        </div>
-                        {inventory && lowStockItems > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-primary-50">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Item</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Current Stock</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Threshold</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {Array.isArray(inventory) && inventory
-                                            .filter(item => (item.quantity <= item.lowStockThreshold))
-                                            .map((item) => (
-                                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-red-500 font-medium">{item.quantity || 0}</td>
-                                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.lowStockThreshold || 0}</td>
-                                                </tr>
-                                            ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <div className="text-gray-500 text-center py-12">
-                                <svg className="mx-auto h-12 w-12 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <h3 className="mt-2 text-sm font-medium text-gray-900">All stock levels are healthy</h3>
-                                <p className="mt-1 text-sm text-gray-500">No items are currently below their threshold levels.</p>
-                            </div>
-                        )}
+                <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-200">
+                        <h3 className="text-lg font-medium text-primary-600">Inventory Overview</h3>
                     </div>
+                    {Array.isArray(inventory) && inventory.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-primary-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Item</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Category</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Quantity</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Price</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Total Value</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {inventory.map((item, index) => {
+                                        const quantity = Number(item?.quantity) || 0;
+                                        const price = Number(item?.price) || 0;
+                                        const lowStockThreshold = Number(item?.lowStockThreshold) || 0;
+                                        const isLowStock = quantity <= lowStockThreshold;
 
-                    {/* Inventory Stats */}
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-lg font-medium text-primary-600">Inventory Stats</h3>
+                                        return (
+                                            <tr key={item?.id || index} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                    {item?.name || 'Unknown Item'}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                                    {item?.category || 'Uncategorized'}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                                    {quantity}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                                    {formatCurrency(price)}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                                                    {formatCurrency(price * quantity)}
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    {isLowStock ? (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                            Low Stock
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                            In Stock
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
-                        <div className="p-6">
-                            <div className="grid grid-cols-1 gap-6">
-                                {/* Inventory Value by Category */}
-                                <div>
-                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Value by Category</h4>
-                                    {categoryDistribution && categoryDistribution.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {categoryDistribution.map((category, index) => {
-                                                const inventoryArray = Array.isArray(inventory) ? inventory : [];
-                                                const categoryItems = inventoryArray.filter(item => item.category === category.name);
-                                                const categoryValue = categoryItems.reduce((sum, item) =>
-                                                    sum + ((Number(item?.price) || 0) * (Number(item?.quantity) || 0)), 0);
-                                                const percentage = totalInventoryValue > 0 ?
-                                                    (categoryValue / totalInventoryValue) * 100 : 0;
-
-                                                return (
-                                                    <div key={index} className="relative pt-1">
-                                                        <div className="flex mb-2 items-center justify-between">
-                                                            <div>
-                                                                <span className="text-xs font-semibold inline-block text-primary-600">
-                                                                    {category.name}
-                                                                </span>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <span className="text-xs font-semibold inline-block text-primary-600">
-                                                                    {formatCurrency(categoryValue)} ({percentage.toFixed(1)}%)
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-primary-100">
-                                                            <div
-                                                                style={{ width: `${percentage}%` }}
-                                                                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-primary-500"
-                                                            ></div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-gray-500">No category data available</p>
-                                    )}
-                                </div>
-
-                                {/* Stock Level Summary */}
-                                <div>
-                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Stock Level Summary</h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-green-50 p-3 rounded-lg text-center">
-                                            <p className="text-sm text-gray-500">Healthy Items</p>
-                                            <p className="text-xl font-bold text-green-600">
-                                                {totalItems - lowStockItems}
-                                            </p>
-                                        </div>
-                                        <div className="bg-red-50 p-3 rounded-lg text-center">
-                                            <p className="text-sm text-gray-500">Low Stock Items</p>
-                                            <p className="text-xl font-bold text-red-600">
-                                                {lowStockItems}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    ) : (
+                        <div className="text-gray-500 text-center py-12">
+                            <svg className="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            <p className="mt-2">No inventory items available</p>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
         </div>

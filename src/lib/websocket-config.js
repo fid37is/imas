@@ -1,39 +1,47 @@
 // lib/websocket-config.js
-// Shared WebSocket configuration for both apps
-
 export const WEBSOCKET_CONFIG = {
-    // Use environment variable or fallback to localhost
-    INVENTORY_WS_URL: process.env.INVENTORY_WEBSOCKET_URL || 'ws://localhost:3004',
-    STOREFRONT_WS_URL: process.env.STOREFRONT_WEBSOCKET_URL || 'ws://localhost:3000',
+    // Your storefront URL (where orders come from)
+    SERVER_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:3001',
     
-    // WebSocket events
-    EVENTS: {
-        NEW_ORDER: 'new_order',
-        ORDER_STATUS_UPDATE: 'order_status_update',
-        CONNECTION: 'connection',
-        DISCONNECT: 'disconnect',
-        JOIN_ROOM: 'join_room',
-        LEAVE_ROOM: 'leave_room'
-    },
+    // Webhook URL for your inventory app (where notifications are received)
+    INVENTORY_WEBHOOK_URL: process.env.INVENTORY_WEBHOOK_URL || 'http://localhost:3002/api/webhooks/order-notifications',
     
-    // Rooms for organizing connections
-    ROOMS: {
-        INVENTORY_ADMIN: 'inventory_admin',
-        CUSTOMER_ORDERS: 'customer_orders'
-    },
+    // Alternative webhook URL for external services
+    WEBHOOK_URL: process.env.WEBHOOK_URL || null,
     
-    // Retry configuration
-    RETRY: {
-        MAX_ATTEMPTS: 5,
-        DELAY: 1000, // 1 second
-        BACKOFF_MULTIPLIER: 2
+    // Webhook secret for secure communication
+    WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || 'your-webhook-secret-key-change-this',
+    
+    // SSE endpoint for real-time notifications
+    SSE_ENDPOINT: '/api/orders/notifications',
+    
+    // Notification settings
+    NOTIFICATION_SETTINGS: {
+        // Auto-retry settings
+        maxRetries: 3,
+        retryDelay: 1000, // 1 second
+        
+        // Connection settings
+        heartbeatInterval: 30000, // 30 seconds
+        reconnectDelay: 2000, // 2 seconds
+        maxReconnectAttempts: 5,
+        
+        // Browser notification settings
+        enableBrowserNotifications: true,
+        enableSounds: true,
+        soundVolume: 0.3
     }
 };
 
-export const WEBHOOK_CONFIG = {
-    // Webhook URLs - set these in your environment variables
+// Environment-specific configurations
+if (process.env.NODE_ENV === 'production') {
+    // Production settings
+    WEBSOCKET_CONFIG.SERVER_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'wss://your-storefront.com';
+    WEBSOCKET_CONFIG.INVENTORY_WEBHOOK_URL = process.env.INVENTORY_WEBHOOK_URL || 'https://your-inventory-app.com/api/webhooks/order-notifications';
+} else if (process.env.NODE_ENV === 'development') {
+    // Development settings
+    WEBSOCKET_CONFIG.SERVER_URL = 'ws://localhost:3001';
+    WEBSOCKET_CONFIG.INVENTORY_WEBHOOK_URL = 'http://localhost:3002/api/webhooks/order-notifications';
+}
 
-    INVENTORY_WEBHOOK_URL: process.env.INVENTORY_WEBHOOK_URL || 'http://localhost:3001/api/orders/receive-webhook',
-    WEBHOOK_SECRET: process.env.WEBHOOK_SECRET || 'your-webhook-secret-key'
-};
-
+export default WEBSOCKET_CONFIG;

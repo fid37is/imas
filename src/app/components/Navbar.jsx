@@ -3,7 +3,7 @@ import { auth } from "../firebase/config";
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LogOut, Package } from "lucide-react";
-// import NotificationBell from "./NotificationBell";
+import NotificationBell from "./NotificationBell";
 
 export default function Navbar({ user }) {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -94,10 +94,10 @@ export default function Navbar({ user }) {
                     {/* Notifications and User section (hidden on mobile) */}
                     <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
                         {/* Notifications */}
-                        {/* <NotificationBell 
+                        <NotificationBell 
                             onOrderSelect={handleOrderSelect}
                             setActiveView={(view) => navigate(`/${view}`)}
-                        /> */}
+                        />
 
                         <span className="text-sm text-gray-200">
                             {user.email}
@@ -113,10 +113,10 @@ export default function Navbar({ user }) {
                     {/* Mobile menu button */}
                     <div className="flex items-center sm:hidden space-x-2">
                         {/* Mobile Notifications */}
-                        {/* <NotificationBell 
+                        <NotificationBell 
                             onOrderSelect={handleOrderSelect}
                             setActiveView={(view) => navigate(`/${view}`)}
-                        /> */}
+                        />
 
                         <button
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
