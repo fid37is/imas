@@ -61,36 +61,11 @@ interface SaleData {
   sku: string;
 }
 
-// Order interfaces
-export interface OrderItem {
-  name: string;
-  quantity: number;
-  price: number;
-  sku?: string;
-}
-
-export interface Order {
-  id: string;
-  orderId: string;
-  customerName: string;
-  customerEmail: string;
-  orderDate: string;
-  status: 'pending' | 'processing' | 'fulfilled' | 'cancelled';
-  total: number;
-  items: OrderItem[];
-  shippingAddress: string;
-  paymentStatus: 'pending' | 'paid' | 'failed';
-  notes?: string;
-  trackingNumber?: string;
-  userId: string;
-}
-
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [salesData, setSalesData] = useState<SaleRecord[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
   const [showLowStockAlert, setShowLowStockAlert] = useState<boolean>(false);
 
@@ -163,36 +138,6 @@ export default function Home() {
             console.error("Error loading sales data:", error);
             setSalesData([]);
             toast.error("Failed to load sales data");
-          }
-
-          // Load orders data (you'll need to implement getOrders in your service)
-          try {
-            // For now, using sample data - replace with actual API call
-            const sampleOrders: Order[] = [
-              {
-                id: 'ORD-001',
-                orderId: 'ORD-001',
-                customerName: 'John Smith',
-                customerEmail: 'john@example.com',
-                orderDate: '2024-01-15',
-                status: 'pending',
-                total: 299.99,
-                items: [
-                  { name: 'Wireless Headphones', quantity: 1, price: 199.99 },
-                  { name: 'Phone Case', quantity: 2, price: 50.00 }
-                ],
-                shippingAddress: '123 Main St, City, State 12345',
-                paymentStatus: 'paid',
-                notes: 'Please handle with care',
-                trackingNumber: '',
-                userId: user.uid
-              }
-            ];
-            setOrders(sampleOrders);
-          } catch (error) {
-            console.error("Error loading orders:", error);
-            setOrders([]);
-            toast.error("Failed to load orders");
           }
 
           toast.success("Data loaded successfully!");
@@ -281,63 +226,6 @@ export default function Home() {
     }
   };
 
-  // Handle order status updates
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: Order['status'], trackingNumber?: string) => {
-    try {
-      setOrders(prevOrders =>
-        prevOrders.map(order =>
-          order.id === orderId
-            ? { ...order, status: newStatus, trackingNumber: trackingNumber || order.trackingNumber }
-            : order
-        )
-      );
-
-      // Here you would make API call to update status
-      // await updateOrderStatus(orderId, newStatus, trackingNumber);
-
-      toast.success(`Order ${orderId} status updated to ${newStatus}`);
-      
-      // If marking as fulfilled, update inventory
-      if (newStatus === 'fulfilled') {
-        const order = orders.find(o => o.id === orderId);
-        if (order) {
-          // Update inventory quantities based on order items
-          const updatedInventory = inventory.map(invItem => {
-            const orderItem = order.items.find(item => 
-              item.name === invItem.name || item.sku === invItem.sku
-            );
-            if (orderItem) {
-              return {
-                ...invItem,
-                quantity: Math.max(0, invItem.quantity - orderItem.quantity),
-                lastUpdated: new Date().toISOString()
-              };
-            }
-            return invItem;
-          });
-          setInventory(updatedInventory);
-          
-          toast.info("Inventory updated based on fulfilled order");
-        }
-      }
-    } catch (error) {
-      console.error('Failed to update order status:', error);
-      toast.error('Failed to update order status');
-    }
-  };
-
-  // Handle resending confirmation emails
-  const handleResendEmail = async (order: Order) => {
-    try {
-      // API call to resend email would go here
-      console.log(`Resending confirmation email for order ${order.orderId}`);
-      toast.success('Confirmation email sent successfully!');
-    } catch (error) {
-      console.error('Failed to resend email:', error);
-      toast.error('Failed to send email. Please try again.');
-    }
-  };
-
   // If still checking auth state
   if (loading && !user) {
     return <Loading />;
@@ -400,13 +288,7 @@ export default function Home() {
             <Route 
               path="/orders" 
               element={
-                <OrderManagement 
-                  orders={orders}
-                  setOrders={setOrders}
-                  onUpdateOrderStatus={handleUpdateOrderStatus}
-                  onResendEmail={handleResendEmail}
-                  inventory={inventory}
-                />
+                <OrderManagement />
               } 
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

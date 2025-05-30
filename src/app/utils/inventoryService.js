@@ -937,210 +937,285 @@ export const getOrderStats = async () => {
 };
 
 // Helper function to find the row number for a specific orderId
-const findOrderRowNumber = async (orderId) => {
-    try {
-        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
-        
-        // Get all order IDs from column A (excluding header)
-        const response = await fetch('/api/sheets/getRange', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sheetId: SHEET_ID,
-                range: 'Orders!A:A' // Get all values in column A
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to fetch order data: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        const orderIds = result.values || [];
-        
-        // Find the row index (add 1 because sheets are 1-indexed, add 1 more to skip header)
-        const rowIndex = orderIds.findIndex((row, index) => 
-            index > 0 && row[0] === orderId // Skip header row (index 0)
-        );
-        
-        if (rowIndex === -1) {
-            throw new Error(`Order ID ${orderId} not found`);
-        }
-        
-        return rowIndex + 1; // Convert to 1-based indexing
-    } catch (error) {
-        console.error('Error finding order row:', error);
-        throw error;
-    }
-};
 
-export const updateOrderStatusInSheet = async (orderId, newStatus) => {
+// utils/inventoryService.js - Add these functions to your existing service
+
+/**
+ * Update order status in Google Sheets
+ * @param {string} orderId - The order ID to update
+ * @param {string} newStatus - The new status (pending, processing, shipped, delivered, cancelled)
+ * @param {string} trackingNumber - Optional tracking number for shipped orders
+ * @returns {Promise<Object>} - Result of the update operation
+ */
+export const updateOrderStatusInSheet = async (orderId, newStatus, trackingNumber = null) => {
     try {
+        const requestBody = {
+            orderId,
+            status: newStatus.toLowerCase()
+        };
+
+        // Add tracking number if provided
+        if (trackingNumber) {
+            requestBody.trackingNumber = trackingNumber;
+        }
+
         const response = await fetch('/api/orders/update-status', {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                orderId: orderId,
-                status: newStatus
-            })
+            body: JSON.stringify(requestBody),
         });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        
+
         const result = await response.json();
-        
+
+        if (!response.ok) {
+            throw new Error(result.error || `HTTP error! status: ${response.status}`);
+        }
+
         if (!result.success) {
             throw new Error(result.error || 'Update failed');
         }
-        
+
         return result;
+
     } catch (error) {
         console.error('Error updating order status:', error);
-        throw error;
+        throw new Error(`Failed to update order status: ${error.message}`);
     }
 };
 
-// Complete implementation using your existing generic updateRow API
-export const updateOrderStatusInSheetGeneric = async (orderId, newStatus) => {
+/**
+ * Get current order status from Google Sheets
+ * @param {string} orderId - The order ID to check
+ * @returns {Promise<Object>} - Current order status information
+ */
+export const getOrderStatus = async (orderId) => {
     try {
-        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
-        
-        if (!SHEET_ID) {
-            throw new Error('Google Sheet ID not found in environment variables');
-        }
-        
-        // Find the row number for the given orderId
-        const rowNumber = await findOrderRowNumber(orderId);
-        
-        // Status is in column D (4th column) based on your header structure
-        const range = `Orders!D${rowNumber}`;
-        
-        const response = await fetch('/api/sheets/updateRow', {
-            method: 'PUT',
+        const response = await fetch(`/api/orders/update-status?orderId=${encodeURIComponent(orderId)}`, {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                sheetId: SHEET_ID,
-                range: range,
-                values: [newStatus]
-            })
         });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-        
+
         const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || `HTTP error! status: ${response.status}`);
+        }
+
         return result;
+
     } catch (error) {
-        console.error('Error updating order status with generic API:', error);
-        throw error;
+        console.error('Error fetching order status:', error);
+        throw new Error(`Failed to fetch order status: ${error.message}`);
     }
 };
 
-// Alternative implementation that updates both status and updatedAt timestamp
-export const updateOrderStatusWithTimestamp = async (orderId, newStatus) => {
+/**
+ * Batch update multiple order statuses
+ * @param {Array} orderUpdates - Array of {orderId, status, trackingNumber} objects
+ * @returns {Promise<Array>} - Array of update results
+ */
+export const batchUpdateOrderStatuses = async (orderUpdates) => {
     try {
-        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+        const updatePromises = orderUpdates.map(update => 
+            updateOrderStatusInSheet(update.orderId, update.status, update.trackingNumber)
+        );
+
+        const results = await Promise.allSettled(updatePromises);
         
-        if (!SHEET_ID) {
-            throw new Error('Google Sheet ID not found in environment variables');
-        }
-        
-        const rowNumber = await findOrderRowNumber(orderId);
-        const currentTimestamp = new Date().toISOString();
-        
-        // Update both status (column D) and updatedAt (column W) based on your headers
-        const statusRange = `Orders!D${rowNumber}`;
-        const timestampRange = `Orders!W${rowNumber}`;
-        
-        // Update status
-        const statusResponse = await fetch('/api/sheets/updateRow', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sheetId: SHEET_ID,
-                range: statusRange,
-                values: [newStatus]
-            })
+        const successfulUpdates = [];
+        const failedUpdates = [];
+
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled') {
+                successfulUpdates.push({
+                    orderId: orderUpdates[index].orderId,
+                    result: result.value
+                });
+            } else {
+                failedUpdates.push({
+                    orderId: orderUpdates[index].orderId,
+                    error: result.reason.message
+                });
+            }
         });
+
+        return {
+            successful: successfulUpdates,
+            failed: failedUpdates,
+            totalProcessed: orderUpdates.length,
+            successCount: successfulUpdates.length,
+            failureCount: failedUpdates.length
+        };
+
+    } catch (error) {
+        console.error('Error in batch update:', error);
+        throw new Error(`Batch update failed: ${error.message}`);
+    }
+};
+
+/**
+ * Send order status update notification to customer (optional)
+ * This function can be extended to send emails or SMS notifications
+ * @param {string} orderId - The order ID
+ * @param {string} newStatus - The new status
+ * @param {Object} customerInfo - Customer contact information
+ * @param {string} trackingNumber - Optional tracking number
+ * @returns {Promise<Object>} - Notification result
+ */
+export const notifyCustomerStatusUpdate = async (orderId, newStatus, customerInfo, trackingNumber = null) => {
+    try {
+        // This is a placeholder for your notification logic
+        // You can integrate with your email service, SMS service, etc.
         
-        if (!statusResponse.ok) {
-            throw new Error(`Failed to update status: ${statusResponse.status}`);
-        }
+        const notificationData = {
+            orderId,
+            newStatus,
+            customerEmail: customerInfo.email,
+            customerName: customerInfo.name,
+            trackingNumber,
+            timestamp: new Date().toISOString()
+        };
+
+        // Example: Send email notification (implement based on your email service)
+        // const emailResult = await sendStatusUpdateEmail(notificationData);
         
-        // Update timestamp
-        const timestampResponse = await fetch('/api/sheets/updateRow', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                sheetId: SHEET_ID,
-                range: timestampRange,
-                values: [currentTimestamp]
-            })
-        });
-        
-        if (!timestampResponse.ok) {
-            throw new Error(`Failed to update timestamp: ${timestampResponse.status}`);
-        }
+        console.log('Customer notification data prepared:', notificationData);
         
         return {
             success: true,
-            message: 'Order status and timestamp updated successfully',
-            orderId,
-            newStatus,
-            updatedAt: currentTimestamp
+            message: 'Customer notification prepared',
+            data: notificationData
         };
+
     } catch (error) {
-        console.error('Error updating order status with timestamp:', error);
-        throw error;
+        console.error('Error preparing customer notification:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 };
 
-// Batch update function if you need to update multiple orders
-export const batchUpdateOrderStatus = async (updates) => {
-    try {
-        const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
-        
-        if (!SHEET_ID) {
-            throw new Error('Google Sheet ID not found in environment variables');
-        }
-        
-        const results = [];
-        
-        for (const update of updates) {
-            try {
-                const result = await updateOrderStatusInSheetGeneric(update.orderId, update.newStatus);
-                results.push({
-                    orderId: update.orderId,
-                    success: true,
-                    result
-                });
-            } catch (error) {
-                results.push({
-                    orderId: update.orderId,
-                    success: false,
-                    error: error.message
-                });
-            }
-        }
-        
-        return results;
-    } catch (error) {
-        console.error('Error in batch update:', error);
-        throw error;
+/**
+ * Validate order status transition
+ * @param {string} currentStatus - Current order status
+ * @param {string} newStatus - Proposed new status
+ * @returns {Object} - Validation result
+ */
+export const validateStatusTransition = (currentStatus, newStatus) => {
+    const validTransitions = {
+        'pending': ['processing', 'cancelled'],
+        'processing': ['shipped', 'cancelled'],
+        'shipped': ['delivered', 'cancelled'],
+        'delivered': [], // Final state - no transitions allowed
+        'cancelled': [] // Final state - no transitions allowed
+    };
+
+    const current = currentStatus?.toLowerCase() || 'pending';
+    const proposed = newStatus?.toLowerCase();
+
+    if (!proposed) {
+        return {
+            valid: false,
+            error: 'New status is required'
+        };
     }
+
+    const allowedTransitions = validTransitions[current] || [];
+    
+    if (current === proposed) {
+        return {
+            valid: true,
+            warning: 'Status is already set to this value'
+        };
+    }
+
+    if (!allowedTransitions.includes(proposed)) {
+        return {
+            valid: false,
+            error: `Cannot transition from ${current} to ${proposed}. Allowed transitions: ${allowedTransitions.join(', ') || 'none'}`
+        };
+    }
+
+    return {
+        valid: true,
+        message: `Status can be updated from ${current} to ${proposed}`
+    };
+};
+
+/**
+ * Get order status history (if you implement status history tracking)
+ * @param {string} orderId - The order ID
+ * @returns {Promise<Array>} - Array of status changes
+ */
+export const getOrderStatusHistory = async (orderId) => {
+    try {
+        // This would require a separate sheet or additional columns to track status history
+        // For now, this is a placeholder that returns current status
+        
+        const currentStatus = await getOrderStatus(orderId);
+        
+        return [{
+            orderId,
+            status: currentStatus.status,
+            timestamp: new Date().toISOString(),
+            note: 'Current status'
+        }];
+
+    } catch (error) {
+        console.error('Error fetching order status history:', error);
+        throw new Error(`Failed to fetch status history: ${error.message}`);
+    }
+};
+
+/**
+ * Helper function to format status for display
+ * @param {string} status - The status to format
+ * @returns {Object} - Formatted status with color and label
+ */
+export const formatOrderStatus = (status) => {
+    const statusConfig = {
+        'pending': {
+            label: 'Pending',
+            color: 'yellow',
+            bgColor: 'bg-yellow-100',
+            textColor: 'text-yellow-800',
+            borderColor: 'border-yellow-200'
+        },
+        'processing': {
+            label: 'Processing',
+            color: 'blue',
+            bgColor: 'bg-blue-100',
+            textColor: 'text-blue-800',
+            borderColor: 'border-blue-200'
+        },
+        'shipped': {
+            label: 'Shipped',
+            color: 'purple',
+            bgColor: 'bg-purple-100',
+            textColor: 'text-purple-800',
+            borderColor: 'border-purple-200'
+        },
+        'delivered': {
+            label: 'Delivered',
+            color: 'green',
+            bgColor: 'bg-green-100',
+            textColor: 'text-green-800',
+            borderColor: 'border-green-200'
+        },
+        'cancelled': {
+            label: 'Cancelled',
+            color: 'red',
+            bgColor: 'bg-red-100',
+            textColor: 'text-red-800',
+            borderColor: 'border-red-200'
+        }
+    };
+
+    const normalizedStatus = status?.toLowerCase() || 'pending';
+    return statusConfig[normalizedStatus] || statusConfig['pending'];
 };
