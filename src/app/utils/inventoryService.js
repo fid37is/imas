@@ -249,23 +249,28 @@ export const recordSale = async (item, quantity, customPrice = null) => {
             throw new Error('Not enough items in stock');
         }
 
-        // Calculate sale details - use custom price if provided, otherwise use inventory price
-        const unitPrice = customPrice !== null ? customPrice : inventoryItem.price;
-        const totalPrice = unitPrice * quantity;
+        // Calculate sale details
+        const standardPrice = inventoryItem.price; // Store the original inventory price
+        const actualPrice = customPrice !== null ? customPrice : inventoryItem.price; // Use custom price if provided
+        const totalPrice = actualPrice * quantity;
         const costPrice = inventoryItem.costPrice || 0;
-        const profit = (unitPrice - costPrice) * quantity;
+        const profit = (actualPrice - costPrice) * quantity;
 
-        // Add sale record to sales sheet
+        // Add sale record to sales sheet with enhanced data structure
         const saleRow = [
-            new Date().toISOString(),
-            inventoryItem.name || '',
-            inventoryItem.sku || '',
-            quantity.toString(),
-            unitPrice.toString(), // This will now use custom price if provided
-            totalPrice.toString(),
-            costPrice.toString(),
-            profit.toString(),
-            inventoryItem.id || ''
+            new Date().toISOString(), // timestamp
+            inventoryItem.name || '', // itemName
+            inventoryItem.sku || '', // sku
+            quantity.toString(), // quantity
+            standardPrice.toString(), // standardPrice (original inventory price)
+            actualPrice.toString(), // actualPrice (price actually used for sale)
+            totalPrice.toString(), // totalPrice
+            costPrice.toString(), // costPrice
+            profit.toString(), // profit
+            inventoryItem.id || '', // itemId
+            inventoryItem.category || '', // category
+            (customPrice !== null).toString(), // isPriceModified (boolean flag)
+            customPrice !== null ? 'CUSTOM' : 'STANDARD' // priceType
         ];
 
         await addRowToSheet(SALES_SHEET_RANGE, saleRow);
@@ -281,13 +286,24 @@ export const recordSale = async (item, quantity, customPrice = null) => {
         return {
             id: new Date().getTime().toString(),
             timestamp: new Date().toISOString(),
+            itemId: inventoryItem.id,
             itemName: inventoryItem.name,
             sku: inventoryItem.sku || '',
+            category: inventoryItem.category || '',
             quantity,
-            unitPrice, // This reflects the actual selling price used
+            standardPrice, // Original inventory price
+            actualPrice, // Price actually used
+            unitPrice: actualPrice, // For backward compatibility
             totalPrice,
+            costPrice,
             profit,
-            actualPrice: unitPrice // Add this to make it clear what price was actually used
+            isPriceModified: customPrice !== null,
+            priceType: customPrice !== null ? 'CUSTOM' : 'STANDARD',
+            // Calculate variance details
+            priceVariance: actualPrice - standardPrice,
+            priceVariancePercent: standardPrice > 0 ? ((actualPrice - standardPrice) / standardPrice) * 100 : 0,
+            isDiscounted: actualPrice < standardPrice,
+            isPremium: actualPrice > standardPrice
         };
     } catch (error) {
         console.error('Error recording sale:', error);
@@ -309,17 +325,63 @@ export const getSales = async () => {
             // Ensure row is an array
             const safeRow = Array.isArray(row) ? row : [];
 
+            // Extract all fields based on the recordSale structure
+            const timestamp = safeRow[0] || '';
+            const itemName = safeRow[1] || '';
+            const sku = safeRow[2] || '';
+            const quantity = safeParseInt(safeRow[3], 0);
+            const standardPrice = safeParseFloat(safeRow[4], 0);
+            const actualPrice = safeParseFloat(safeRow[5], 0);
+            const totalPrice = safeParseFloat(safeRow[6], 0);
+            const costPrice = safeParseFloat(safeRow[7], 0);
+            const profit = safeParseFloat(safeRow[8], 0);
+            const itemId = safeRow[9] || '';
+            const category = safeRow[10] || '';
+            const isPriceModified = safeRow[11] === 'true';
+            const priceType = safeRow[12] || 'STANDARD';
+
+            // Calculate variance details
+            const priceVariance = actualPrice - standardPrice;
+            const priceVariancePercent = standardPrice > 0 ? ((actualPrice - standardPrice) / standardPrice) * 100 : 0;
+
             return {
                 id: index.toString(),
-                timestamp: safeRow[0] || '',
-                itemName: safeRow[1] || '',
-                sku: safeRow[2] || '',
-                quantity: safeParseInt(safeRow[3], 0),
-                unitPrice: safeParseFloat(safeRow[4], 0),
-                totalPrice: safeParseFloat(safeRow[5], 0),
-                costPrice: safeParseFloat(safeRow[6], 0),
-                profit: safeParseFloat(safeRow[7], 0),
-                itemId: safeRow[8] || ''
+                timestamp,
+                itemName,
+                name: itemName, // Alias for compatibility
+                sku,
+                quantity,
+                
+                // Price fields - providing multiple aliases for compatibility
+                standardPrice,
+                basePrice: standardPrice, // Alias
+                regularPrice: standardPrice, // Alias
+                
+                actualPrice,
+                unitPrice: actualPrice, // Alias for backward compatibility
+                sellingPrice: actualPrice, // Alias
+                price: actualPrice, // Alias
+                
+                totalPrice,
+                costPrice,
+                profit,
+                
+                // Item details
+                itemId,
+                category,
+                
+                // Price modification tracking
+                isPriceModified,
+                priceType,
+                
+                // Calculated variance fields
+                priceVariance,
+                priceVariancePercent,
+                isDiscounted: actualPrice < standardPrice,
+                isPremium: actualPrice > standardPrice,
+                
+                // Date field alias for compatibility
+                date: timestamp
             };
         });
 
