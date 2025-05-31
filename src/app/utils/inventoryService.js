@@ -297,8 +297,9 @@ export const recordSale = async (item, quantity, customPrice = null) => {
             totalPrice,
             costPrice,
             profit,
-            isPriceModified: customPrice !== null,
-            priceType: customPrice !== null ? 'CUSTOM' : 'STANDARD',
+            isPriceModified: customPrice !== null && customPrice !== inventoryItem.price,
+            priceType: customPrice !== null && customPrice !== inventoryItem.price ? 'CUSTOM' : 'STANDARD',
+
             // Calculate variance details
             priceVariance: actualPrice - standardPrice,
             priceVariancePercent: standardPrice > 0 ? ((actualPrice - standardPrice) / standardPrice) * 100 : 0,
@@ -351,35 +352,35 @@ export const getSales = async () => {
                 name: itemName, // Alias for compatibility
                 sku,
                 quantity,
-                
+
                 // Price fields - providing multiple aliases for compatibility
                 standardPrice,
                 basePrice: standardPrice, // Alias
                 regularPrice: standardPrice, // Alias
-                
+
                 actualPrice,
                 unitPrice: actualPrice, // Alias for backward compatibility
                 sellingPrice: actualPrice, // Alias
                 price: actualPrice, // Alias
-                
+
                 totalPrice,
                 costPrice,
                 profit,
-                
+
                 // Item details
                 itemId,
                 category,
-                
+
                 // Price modification tracking
                 isPriceModified,
                 priceType,
-                
+
                 // Calculated variance fields
                 priceVariance,
                 priceVariancePercent,
                 isDiscounted: actualPrice < standardPrice,
                 isPremium: actualPrice > standardPrice,
-                
+
                 // Date field alias for compatibility
                 date: timestamp
             };
