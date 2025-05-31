@@ -307,7 +307,6 @@ export const recordSale = async (item, quantity, customPrice = null) => {
             isPremium: actualPrice > standardPrice
         };
     } catch (error) {
-        console.error('Error recording sale:', error);
         throw error;
     }
 };
@@ -388,7 +387,6 @@ export const getSales = async () => {
 
         return sales;
     } catch (error) {
-        console.error('Error getting sales:', error);
         throw error;
     }
 };

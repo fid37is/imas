@@ -202,7 +202,6 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
             setPendingStatus(null);
         } catch (error) {
             toast.error('Failed to update order status');
-            console.error('Status update failed:', error);
         } finally {
             setIsProcessing(false);
         }
@@ -216,7 +215,6 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
             setShowCancelConfirm(false);
         } catch (error) {
             toast.error('Failed to cancel order');
-            console.error('Cancel order failed:', error);
         } finally {
             setIsProcessing(false);
         }
@@ -233,7 +231,6 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
                 setIsOpen(false);
             } catch (error) {
                 toast.error('Failed to update order status');
-                console.error('Status update failed:', error);
             } finally {
                 setIsProcessing(false);
             }
@@ -387,7 +384,6 @@ const OrdersTable = ({
             toast.success('Email resent successfully');
         } catch (error) {
             toast.error('Failed to resend email');
-            console.error('Email resend failed:', error);
         } finally {
             setEmailProcessing(prev => ({ ...prev, [orderId]: false }));
         }

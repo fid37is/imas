@@ -6,93 +6,84 @@ export async function PUT(request) {
     try {
         const { orderId, status, trackingNumber } = await request.json();
 
+        // Convert orderId to string for consistent comparison
+        const orderIdStr = String(orderId).trim();
+        console.log('Looking for orderId:', orderIdStr);
+
         // Validate required parameters
-        if (!orderId || !status) {
+        if (!orderIdStr || !status) {
             return NextResponse.json(
-                { 
+                {
                     success: false,
-                    error: 'Missing required parameters: orderId or status' 
+                    error: 'Missing required parameters: orderId or status'
                 },
                 { status: 400 }
             );
         }
 
-        // Validate status values
-        const validStatuses = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
-        if (!validStatuses.includes(status.toLowerCase())) {
-            return NextResponse.json(
-                { 
-                    success: false,
-                    error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
-                },
-                { status: 400 }
-            );
-        }
-
-        // Your Google Sheet ID - replace with your actual sheet ID
-        const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-        const SHEET_NAME = 'Orders'; // Adjust to your sheet tab name
-        
-        if (!SHEET_ID) {
-            return NextResponse.json(
-                { 
-                    success: false,
-                    error: 'Google Sheet ID not configured in environment variables' 
-                },
-                { status: 500 }
-            );
-        }
+        // ... existing validation code ...
 
         const sheets = await getSheetsClient();
+        const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+        const SHEET_NAME = 'Orders';
 
-        // Step 1: Get all data to find the row with the orderId
+        // Get all data
         const getResponse = await sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_NAME}!A:Z`, // Adjust range as needed
+            range: `${SHEET_NAME}!A:Z`,
         });
 
         const rows = getResponse.data.values || [];
-        
+        console.log('Total rows found:', rows.length);
+
         if (rows.length === 0) {
             return NextResponse.json(
-                { 
-                    success: false,
-                    error: 'No data found in sheet' 
-                },
+                { success: false, error: 'No data found in sheet' },
                 { status: 404 }
             );
         }
 
-        // Find the header row to identify column indices
         const headers = rows[0];
-        
-        // Find column indices (case-insensitive and flexible matching)
-        const orderIdColumnIndex = headers.findIndex(header => 
-            header.toLowerCase().replace(/\s+/g, '').includes('orderid') ||
-            header.toLowerCase().replace(/\s+/g, '').includes('id')
-        );
-        
-        const statusColumnIndex = headers.findIndex(header => 
-            header.toLowerCase().includes('status')
-        );
-        
-        const trackingColumnIndex = headers.findIndex(header => 
-            header.toLowerCase().includes('tracking') ||
-            header.toLowerCase().includes('track')
-        );
-        
-        const lastUpdatedColumnIndex = headers.findIndex(header => 
-            header.toLowerCase().includes('updated') || 
-            header.toLowerCase().includes('modified') ||
-            header.toLowerCase().includes('lastupdated')
+        console.log('Headers:', headers);
+
+        // More robust header matching
+        const orderIdColumnIndex = headers.findIndex(header => {
+            if (!header) return false;
+            const headerLower = String(header).toLowerCase().replace(/\s+/g, '');
+            return headerLower.includes('orderid') ||
+                headerLower.includes('order_id') ||
+                (headerLower === 'id' && headers.length > 1); // Only match 'id' if not the only column
+        });
+
+        const statusColumnIndex = headers.findIndex(header =>
+            header && String(header).toLowerCase().includes('status')
         );
 
-        // Validate required columns exist
+        const trackingColumnIndex = headers.findIndex(header =>
+            header && (String(header).toLowerCase().includes('tracking') ||
+                String(header).toLowerCase().includes('track'))
+        );
+
+        const lastUpdatedColumnIndex = headers.findIndex(header =>
+            header && (String(header).toLowerCase().includes('updated') ||
+                String(header).toLowerCase().includes('modified') ||
+                String(header).toLowerCase().includes('lastupdated'))
+        );
+
+        console.log('Column indices:', {
+            orderId: orderIdColumnIndex,
+            status: statusColumnIndex,
+            tracking: trackingColumnIndex,
+            lastUpdated: lastUpdatedColumnIndex
+        });
+
+        // Validate required columns
         if (orderIdColumnIndex === -1) {
             return NextResponse.json(
-                { 
+                {
                     success: false,
-                    error: 'Order ID column not found in sheet. Expected column containing "orderid" or "id"' 
+                    error: 'Order ID column not found in sheet',
+                    availableHeaders: headers
                 },
                 { status: 400 }
             );
@@ -100,116 +91,157 @@ export async function PUT(request) {
 
         if (statusColumnIndex === -1) {
             return NextResponse.json(
-                { 
+                {
                     success: false,
-                    error: 'Status column not found in sheet. Expected column containing "status"' 
+                    error: 'Status column not found in sheet',
+                    availableHeaders: headers
                 },
                 { status: 400 }
             );
         }
 
-        // Find the row with the matching orderId
-        const dataRows = rows.slice(1); // Skip header row
-        const rowIndex = dataRows.findIndex(row => 
-            row[orderIdColumnIndex] && row[orderIdColumnIndex].toString() === orderId.toString()
-        );
+        // More robust row finding
+        const dataRows = rows.slice(1);
+        console.log('Searching through', dataRows.length, 'data rows');
+
+        const rowIndex = dataRows.findIndex(row => {
+            if (!row || !row[orderIdColumnIndex]) return false;
+            const cellValue = String(row[orderIdColumnIndex]).trim();
+            console.log('Comparing:', cellValue, '===', orderIdStr);
+            return cellValue === orderIdStr;
+        });
 
         if (rowIndex === -1) {
+            // Log all order IDs for debugging
+            const existingOrderIds = dataRows
+                .map((row, idx) => ({
+                    row: idx + 2,
+                    orderId: row[orderIdColumnIndex] ? String(row[orderIdColumnIndex]).trim() : 'EMPTY'
+                }))
+                .slice(0, 10); // First 10 for debugging
+
+            console.log('Existing order IDs (first 10):', existingOrderIds);
+
             return NextResponse.json(
-                { 
+                {
                     success: false,
-                    error: `Order with ID ${orderId} not found in sheet` 
+                    error: `Order with ID ${orderIdStr} not found in sheet`,
+                    searchedFor: orderIdStr,
+                    existingOrderIds: existingOrderIds
                 },
                 { status: 404 }
             );
         }
 
-        // Calculate the actual row number (adding 2: 1 for header + 1 for 0-based index)
         const actualRowNumber = rowIndex + 2;
-        
-        // Prepare batch update data
+        console.log('Found order at row:', actualRowNumber);
+
+        // Enhanced getColumnLetter with validation
+        const getColumnLetter = (index) => {
+            if (index < 0) {
+                throw new Error(`Invalid column index: ${index}`);
+            }
+
+            let letter = '';
+            let num = index;
+
+            while (num >= 0) {
+                letter = String.fromCharCode((num % 26) + 65) + letter;
+                num = Math.floor(num / 26) - 1;
+            }
+
+            console.log(`Column index ${index} -> Letter ${letter}`);
+            return letter;
+        };
+
+        // Prepare batch update with validation
         const updateData = [];
         const updateInfo = {
-            orderId,
+            orderId: orderIdStr,
             status,
             updatedAt: new Date().toISOString(),
             updatedColumns: []
         };
 
-        // Convert column index to letter (A, B, C, etc.)
-        const getColumnLetter = (index) => {
-            let letter = '';
-            while (index >= 0) {
-                letter = String.fromCharCode((index % 26) + 65) + letter;
-                index = Math.floor(index / 26) - 1;
-            }
-            return letter;
-        };
-
-        // Update status (required)
-        const statusColumn = getColumnLetter(statusColumnIndex);
-        const statusRange = `${SHEET_NAME}!${statusColumn}${actualRowNumber}`;
-        updateData.push({
-            range: statusRange,
-            values: [[status]]
-        });
-        updateInfo.updatedColumns.push('status');
-
-        // Update tracking number if provided and column exists
-        if (trackingNumber && trackingColumnIndex !== -1) {
-            const trackingColumn = getColumnLetter(trackingColumnIndex);
-            const trackingRange = `${SHEET_NAME}!${trackingColumn}${actualRowNumber}`;
+        try {
+            // Update status (required)
+            const statusColumn = getColumnLetter(statusColumnIndex);
+            const statusRange = `${SHEET_NAME}!${statusColumn}${actualRowNumber}`;
             updateData.push({
-                range: trackingRange,
-                values: [[trackingNumber]]
+                range: statusRange,
+                values: [[status]]
             });
-            updateInfo.trackingNumber = trackingNumber;
-            updateInfo.updatedColumns.push('tracking');
-        }
+            updateInfo.updatedColumns.push('status');
+            console.log('Status update range:', statusRange);
 
-        // Update last updated timestamp if column exists
-        if (lastUpdatedColumnIndex !== -1) {
-            const lastUpdatedColumn = getColumnLetter(lastUpdatedColumnIndex);
-            const lastUpdatedRange = `${SHEET_NAME}!${lastUpdatedColumn}${actualRowNumber}`;
-            updateData.push({
-                range: lastUpdatedRange,
-                values: [[new Date().toISOString()]]
-            });
-            updateInfo.updatedColumns.push('lastUpdated');
-        }
-
-        // Perform batch update
-        const batchUpdateResponse = await sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId: SHEET_ID,
-            resource: {
-                valueInputOption: 'USER_ENTERED',
-                data: updateData
+            // Update tracking number if provided and column exists
+            if (trackingNumber && trackingColumnIndex !== -1) {
+                const trackingColumn = getColumnLetter(trackingColumnIndex);
+                const trackingRange = `${SHEET_NAME}!${trackingColumn}${actualRowNumber}`;
+                updateData.push({
+                    range: trackingRange,
+                    values: [[trackingNumber]]
+                });
+                updateInfo.trackingNumber = trackingNumber;
+                updateInfo.updatedColumns.push('tracking');
+                console.log('Tracking update range:', trackingRange);
             }
-        });
 
-        // Log successful update
-        console.log(`Order ${orderId} status updated to ${status}`, {
-            rowNumber: actualRowNumber,
-            updatedColumns: updateInfo.updatedColumns,
-            updatedCells: batchUpdateResponse.data.totalUpdatedCells
-        });
+            // Update last updated timestamp if column exists
+            if (lastUpdatedColumnIndex !== -1) {
+                const lastUpdatedColumn = getColumnLetter(lastUpdatedColumnIndex);
+                const lastUpdatedRange = `${SHEET_NAME}!${lastUpdatedColumn}${actualRowNumber}`;
+                updateData.push({
+                    range: lastUpdatedRange,
+                    values: [[new Date().toISOString()]]
+                });
+                updateInfo.updatedColumns.push('lastUpdated');
+                console.log('LastUpdated range:', lastUpdatedRange);
+            }
 
-        return NextResponse.json({
-            success: true,
-            ...updateInfo,
-            updatedCells: batchUpdateResponse.data.totalUpdatedCells,
-            message: `Order ${orderId} successfully updated`
-        });
+            console.log('Batch update data:', JSON.stringify(updateData, null, 2));
+
+            // Perform batch update
+            const batchUpdateResponse = await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: SHEET_ID,
+                resource: {
+                    valueInputOption: 'USER_ENTERED',
+                    data: updateData
+                }
+            });
+
+            console.log('Batch update successful:', batchUpdateResponse.data);
+
+            return NextResponse.json({
+                success: true,
+                ...updateInfo,
+                updatedCells: batchUpdateResponse.data.totalUpdatedCells,
+                message: `Order ${orderIdStr} successfully updated`
+            });
+
+        } catch (columnError) {
+            console.error('Column processing error:', columnError);
+            throw new Error(`Column processing failed: ${columnError.message}`);
+        }
 
     } catch (error) {
-        console.error('Error updating order status:', error);
-        
-        // Return detailed error information for debugging
+        console.error('=== DETAILED ERROR ===');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+
+        // Check if it's a Google API error
+        if (error.response) {
+            console.error('API Error status:', error.response.status);
+            console.error('API Error data:', JSON.stringify(error.response.data, null, 2));
+        }
+
         return NextResponse.json(
-            { 
+            {
                 success: false,
                 error: 'Failed to update order status',
                 details: error.message,
+                errorType: error.name,
                 timestamp: new Date().toISOString()
             },
             { status: 500 }
@@ -232,7 +264,7 @@ export async function GET(request) {
 
         const SHEET_ID = process.env.GOOGLE_SHEET_ID;
         const SHEET_NAME = 'Orders';
-        
+
         if (!SHEET_ID) {
             return NextResponse.json(
                 { error: 'Google Sheet ID not configured' },
@@ -249,7 +281,7 @@ export async function GET(request) {
         });
 
         const rows = getResponse.data.values || [];
-        
+
         if (rows.length === 0) {
             return NextResponse.json(
                 { error: 'No data found in sheet' },
@@ -258,10 +290,10 @@ export async function GET(request) {
         }
 
         const headers = rows[0];
-        const orderIdColumnIndex = headers.findIndex(header => 
+        const orderIdColumnIndex = headers.findIndex(header =>
             header.toLowerCase().replace(/\s+/g, '').includes('orderid')
         );
-        const statusColumnIndex = headers.findIndex(header => 
+        const statusColumnIndex = headers.findIndex(header =>
             header.toLowerCase().includes('status')
         );
 
