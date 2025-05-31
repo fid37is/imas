@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
     Edit, 
     Eye, 
@@ -85,7 +85,10 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
     const [pendingStatus, setPendingStatus] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-    const [dropdownPosition, setDropdownPosition] = useState('bottom');
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, placement: 'bottom' });
+    
+    const buttonRef = useRef(null);
+    const dropdownRef = useRef(null);
 
     const statusOptions = [
         { value: 'pending', label: 'Pending', icon: Clock },
@@ -95,22 +98,72 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
         { value: 'cancelled', label: 'Cancelled', icon: XCircle }
     ];
 
+    const calculateDropdownPosition = () => {
+        if (!buttonRef.current) return;
+
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        const dropdownHeight = 200; // Approximate dropdown height
+        const dropdownWidth = 192; // w-48 = 12rem = 192px
+
+        // Calculate available space
+        const spaceBelow = viewportHeight - buttonRect.bottom;
+        const spaceAbove = buttonRect.top;
+        const spaceRight = viewportWidth - buttonRect.left;
+
+        // Determine vertical placement
+        const shouldPlaceAbove = spaceBelow < dropdownHeight && spaceAbove > dropdownHeight;
+        
+        // Calculate position
+        let top, left;
+        
+        if (shouldPlaceAbove) {
+            top = buttonRect.top - dropdownHeight - 4; // 4px gap
+        } else {
+            top = buttonRect.bottom + 4; // 4px gap
+        }
+
+        // Horizontal positioning - align to right edge of button
+        left = buttonRect.right - dropdownWidth;
+        
+        // Ensure dropdown doesn't go off screen
+        if (left < 8) { // 8px margin from edge
+            left = 8;
+        }
+        if (left + dropdownWidth > viewportWidth - 8) {
+            left = viewportWidth - dropdownWidth - 8;
+        }
+
+        setDropdownPosition({
+            top,
+            left,
+            placement: shouldPlaceAbove ? 'top' : 'bottom'
+        });
+    };
+
     const handleDropdownToggle = (e) => {
         if (!isOpen) {
-            // Calculate position before opening
-            const buttonRect = e.currentTarget.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const dropdownHeight = 200; // Approximate dropdown height
-            const spaceBelow = viewportHeight - buttonRect.bottom;
-            
-            if (spaceBelow < dropdownHeight && buttonRect.top > dropdownHeight) {
-                setDropdownPosition('top');
-            } else {
-                setDropdownPosition('bottom');
-            }
+            calculateDropdownPosition();
         }
         setIsOpen(!isOpen);
     };
+
+    // Recalculate position on window resize or scroll
+    useEffect(() => {
+        if (isOpen) {
+            const handleResize = () => calculateDropdownPosition();
+            const handleScroll = () => calculateDropdownPosition();
+            
+            window.addEventListener('resize', handleResize);
+            window.addEventListener('scroll', handleScroll, true);
+            
+            return () => {
+                window.removeEventListener('resize', handleResize);
+                window.removeEventListener('scroll', handleScroll, true);
+            };
+        }
+    }, [isOpen]);
 
     const handleStatusChange = async (newStatus) => {
         // Special handling for cancellation
@@ -193,6 +246,7 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
         <>
             <div className="relative">
                 <button
+                    ref={buttonRef}
                     onClick={handleDropdownToggle}
                     disabled={isCurrentlyUpdating}
                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -206,95 +260,101 @@ const StatusDropdown = ({ order, onUpdateStatus, updatingStatus }) => {
                     {isCurrentlyUpdating ? 'Updating...' : 'Status'}
                     {!isCurrentlyUpdating && <ChevronDown className="w-3 h-3 ml-1" />}
                 </button>
+            </div>
 
-                {isOpen && (
-                    <>
-                        <div 
-                            className="fixed inset-0 z-10" 
-                            onClick={() => {
-                                if (!isProcessing) {
-                                    setIsOpen(false);
-                                    setShowTrackingInput(false);
-                                    setPendingStatus(null);
-                                }
-                            }}
-                        />
-                        <div className={`absolute right-0 z-20 w-48 bg-white border border-gray-200 rounded-md shadow-lg ${
-                            dropdownPosition === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
-                        }`}>
-                            {!showTrackingInput ? (
-                                <div className="py-1">
-                                    {statusOptions.map(option => {
-                                        const Icon = option.icon;
-                                        const isCurrentStatus = option.value === order.status;
-                                        const isCancelled = option.value === 'cancelled';
-                                        
-                                        return (
-                                            <button
-                                                key={option.value}
-                                                onClick={() => handleStatusChange(option.value)}
-                                                disabled={isCurrentStatus || isProcessing}
-                                                className={`w-full text-left px-3 py-2 text-sm flex items-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed ${
-                                                    isCurrentStatus ? 'bg-gray-50 font-medium' : ''
-                                                } ${isCancelled ? 'text-red-600 hover:bg-red-50' : ''}`}
-                                            >
-                                                <Icon className={`w-4 h-4 mr-2 ${isCancelled ? 'text-red-500' : ''}`} />
-                                                {option.label}
-                                                {isCurrentStatus && (
-                                                    <span className="ml-auto text-xs text-gray-500">(current)</span>
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="p-3">
-                                    <p className="text-sm font-medium text-gray-700 mb-2">
-                                        Add Tracking Number (Optional)
-                                    </p>
-                                    <input
-                                        type="text"
-                                        value={trackingNumber}
-                                        onChange={(e) => setTrackingNumber(e.target.value)}
-                                        placeholder="Enter tracking number"
-                                        disabled={isProcessing}
-                                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-accent-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                                        autoFocus
-                                    />
-                                    <div className="flex justify-end space-x-2 mt-2">
+            {/* Portal-style dropdown positioned absolutely to viewport */}
+            {isOpen && (
+                <>
+                    <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => {
+                            if (!isProcessing) {
+                                setIsOpen(false);
+                                setShowTrackingInput(false);
+                                setPendingStatus(null);
+                            }
+                        }}
+                    />
+                    <div 
+                        ref={dropdownRef}
+                        className="fixed z-20 w-48 bg-white border border-gray-200 rounded-md shadow-lg"
+                        style={{
+                            top: dropdownPosition.top,
+                            left: dropdownPosition.left,
+                        }}
+                    >
+                        {!showTrackingInput ? (
+                            <div className="py-1">
+                                {statusOptions.map(option => {
+                                    const Icon = option.icon;
+                                    const isCurrentStatus = option.value === order.status;
+                                    const isCancelled = option.value === 'cancelled';
+                                    
+                                    return (
                                         <button
-                                            onClick={() => {
-                                                if (!isProcessing) {
-                                                    setShowTrackingInput(false);
-                                                    setPendingStatus(null);
-                                                }
-                                            }}
-                                            disabled={isProcessing}
-                                            className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            key={option.value}
+                                            onClick={() => handleStatusChange(option.value)}
+                                            disabled={isCurrentStatus || isProcessing}
+                                            className={`w-full text-left px-3 py-2 text-sm flex items-center hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                isCurrentStatus ? 'bg-gray-50 font-medium' : ''
+                                            } ${isCancelled ? 'text-red-600 hover:bg-red-50' : ''}`}
                                         >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleTrackingSubmit}
-                                            disabled={isProcessing}
-                                            className="px-2 py-1 text-xs bg-primary-700 text-white rounded hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                                        >
-                                            {isProcessing ? (
-                                                <>
-                                                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1"></div>
-                                                    Updating...
-                                                </>
-                                            ) : (
-                                                'Update'
+                                            <Icon className={`w-4 h-4 mr-2 ${isCancelled ? 'text-red-500' : ''}`} />
+                                            {option.label}
+                                            {isCurrentStatus && (
+                                                <span className="ml-auto text-xs text-gray-500">(current)</span>
                                             )}
                                         </button>
-                                    </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="p-3">
+                                <p className="text-sm font-medium text-gray-700 mb-2">
+                                    Add Tracking Number (Optional)
+                                </p>
+                                <input
+                                    type="text"
+                                    value={trackingNumber}
+                                    onChange={(e) => setTrackingNumber(e.target.value)}
+                                    placeholder="Enter tracking number"
+                                    disabled={isProcessing}
+                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-accent-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                                    autoFocus
+                                />
+                                <div className="flex justify-end space-x-2 mt-2">
+                                    <button
+                                        onClick={() => {
+                                            if (!isProcessing) {
+                                                setShowTrackingInput(false);
+                                                setPendingStatus(null);
+                                            }
+                                        }}
+                                        disabled={isProcessing}
+                                        className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleTrackingSubmit}
+                                        disabled={isProcessing}
+                                        className="px-2 py-1 text-xs bg-primary-700 text-white rounded hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                    >
+                                        {isProcessing ? (
+                                            <>
+                                                <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1"></div>
+                                                Updating...
+                                            </>
+                                        ) : (
+                                            'Update'
+                                        )}
+                                    </button>
                                 </div>
-                            )}
-                        </div>
-                    </>
-                )}
-            </div>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
 
             <CancelConfirmationModal
                 order={order}
