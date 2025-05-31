@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Chart } from "chart.js/auto";
-import { Calendar } from "lucide-react";
+import DashboardHeader from "./dashboard/DashboardHeader";
+import SalesDetailView from "./SalesDetailView";
+import InventoryOverview from "./dashboard/InventoryOverview";
 
 const currencyFormatter = new Intl.NumberFormat('en-NG', {
     style: 'currency',
@@ -10,6 +12,7 @@ const currencyFormatter = new Intl.NumberFormat('en-NG', {
 });
 
 export default function Dashboard({ inventory, salesData }) {
+    // State management
     const [totalInventoryValue, setTotalInventoryValue] = useState(0);
     const [totalItems, setTotalItems] = useState(0);
     const [lowStockItems, setLowStockItems] = useState(0);
@@ -22,57 +25,23 @@ export default function Dashboard({ inventory, salesData }) {
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [filteredSalesData, setFilteredSalesData] = useState([]);
-    const [chartsInitialized, setChartsInitialized] = useState(false);
     const [isDataLoading, setIsDataLoading] = useState(true);
 
-    // Initialize and retrieve user preferences
+    // Initialize user preferences
     useEffect(() => {
-        // Check if we're in a browser environment
         if (typeof window !== 'undefined') {
-            // Retrieve active tab if available
-            const savedTab = sessionStorage.getItem('dashboardActiveTab');
-            if (savedTab) {
-                setActiveTab(savedTab);
-            }
+            const savedTab = sessionStorage.getItem('dashboardActiveTab') || 'overview';
+            const savedDateFilter = sessionStorage.getItem('dashboardDateFilter') || 'all';
+            const savedStartDate = sessionStorage.getItem('dashboardCustomStartDate') || '';
+            const savedEndDate = sessionStorage.getItem('dashboardCustomEndDate') || '';
 
-            // Retrieve date filter if available
-            const savedDateFilter = sessionStorage.getItem('dashboardDateFilter');
-            if (savedDateFilter) {
-                setDateRange(savedDateFilter);
-            }
-
-            // Retrieve custom dates if available
-            const savedStartDate = sessionStorage.getItem('dashboardCustomStartDate');
-            const savedEndDate = sessionStorage.getItem('dashboardCustomEndDate');
-            if (savedStartDate) setCustomStartDate(savedStartDate);
-            if (savedEndDate) setCustomEndDate(savedEndDate);
-
-            // Signal data is now loaded
+            setActiveTab(savedTab);
+            setDateRange(savedDateFilter);
+            setCustomStartDate(savedStartDate);
+            setCustomEndDate(savedEndDate);
             setIsDataLoading(false);
         }
     }, []);
-
-    // Save active tab whenever it changes
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem('dashboardActiveTab', activeTab);
-        }
-    }, [activeTab]);
-
-    // Save date filter whenever it changes
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem('dashboardDateFilter', dateRange);
-        }
-    }, [dateRange]);
-
-    // Save custom dates whenever they change
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            sessionStorage.setItem('dashboardCustomStartDate', customStartDate);
-            sessionStorage.setItem('dashboardCustomEndDate', customEndDate);
-        }
-    }, [customStartDate, customEndDate]);
 
     // Apply date filter whenever it changes or salesData changes
     useEffect(() => {
@@ -89,39 +58,17 @@ export default function Dashboard({ inventory, salesData }) {
     // Create charts when data is ready and tab changes
     useEffect(() => {
         if (!isDataLoading && (activeTab === 'overview' || activeTab === 'sales')) {
-            // Clean up old charts to prevent memory leaks
             cleanupCharts();
-
-            // Add a small delay to ensure DOM elements are ready
             const timeout = setTimeout(() => {
                 createCharts();
-                setChartsInitialized(true);
             }, 100);
-
-            return () => {
-                clearTimeout(timeout);
-            };
+            return () => clearTimeout(timeout);
         }
     }, [activeTab, filteredSalesData, categoryDistribution, isDataLoading]);
 
-    // Cleanup charts when component unmounts or before recreating
-    const cleanupCharts = () => {
-        if (typeof window !== 'undefined') {
-            // Get all chart instances and destroy them
-            const chartInstances = Chart.instances || {};
-            Object.keys(chartInstances).forEach(key => {
-                if (chartInstances[key]) {
-                    chartInstances[key].destroy();
-                }
-            });
-        }
-    };
-
     // Cleanup charts on component unmount
     useEffect(() => {
-        return () => {
-            cleanupCharts();
-        };
+        return () => cleanupCharts();
     }, []);
 
     const applyDateFilter = () => {
@@ -139,21 +86,16 @@ export default function Dashboard({ inventory, salesData }) {
         let startDate, endDate;
 
         if (dateRange === 'custom') {
-            // Handle custom date range
             if (!customStartDate && !customEndDate) {
                 setFilteredSalesData(salesData);
                 return;
             }
-
             startDate = customStartDate ? new Date(customStartDate) : new Date(0);
             endDate = customEndDate ? new Date(customEndDate) : now;
-
-            // Set end date to end of day for better inclusivity
             if (customEndDate) {
                 endDate.setHours(23, 59, 59, 999);
             }
         } else {
-            // Handle predefined date ranges
             switch (dateRange) {
                 case 'today':
                     startDate = new Date(now);
@@ -195,16 +137,14 @@ export default function Dashboard({ inventory, salesData }) {
                     endDate = now;
                     break;
                 default:
-                    startDate = new Date(0); // Beginning of time
+                    startDate = new Date(0);
                     endDate = now;
             }
         }
 
         const filtered = salesData.filter(sale => {
-            // Handle both timestamp and date fields
             const saleDate = new Date(sale.timestamp || sale.date);
             if (isNaN(saleDate.getTime())) return false;
-
             return saleDate >= startDate && saleDate <= endDate;
         });
 
@@ -235,8 +175,17 @@ export default function Dashboard({ inventory, salesData }) {
         const itemSales = {};
 
         salesArray.forEach(sale => {
-            const saleTotal = Number(sale?.totalPrice ?? sale?.total ?? 0);
-            const saleProfit = Number(sale?.profit ?? 0);
+            // Use actualPrice if available, otherwise fall back to totalPrice or total
+            const actualSalePrice = Number(sale?.actualPrice ?? 0);
+            const saleQuantity = Number(sale?.quantity ?? 0);
+            const saleTotal = actualSalePrice > 0 ? actualSalePrice * saleQuantity : Number(sale?.totalPrice ?? sale?.total ?? 0);
+
+            // Use recorded profit if available, otherwise calculate from actual prices
+            let saleProfit = Number(sale?.profit ?? 0);
+            if (saleProfit === 0 && actualSalePrice > 0 && sale?.costPrice) {
+                saleProfit = (actualSalePrice - Number(sale.costPrice)) * saleQuantity;
+            }
+
             const itemId = sale?.itemId;
 
             salesSum += saleTotal;
@@ -251,11 +200,10 @@ export default function Dashboard({ inventory, salesData }) {
                         total: 0,
                     };
                 }
-                itemSales[itemId].quantity += Number(sale?.quantity) || 0;
+                itemSales[itemId].quantity += saleQuantity;
                 itemSales[itemId].total += saleTotal;
             }
         });
-
         setTotalSales(salesSum);
         setProfit(profitSum);
         setTopSellingItems(
@@ -276,10 +224,21 @@ export default function Dashboard({ inventory, salesData }) {
         setCategoryDistribution(categoryData);
     };
 
+    const cleanupCharts = () => {
+        if (typeof window !== 'undefined') {
+            const chartInstances = Chart.instances || {};
+            Object.keys(chartInstances).forEach(key => {
+                if (chartInstances[key]) {
+                    chartInstances[key].destroy();
+                }
+            });
+        }
+    };
+
     const createCharts = () => {
         const salesArray = Array.isArray(filteredSalesData) ? filteredSalesData : [];
 
-        // Create sales chart if it exists and has data
+        // Create sales chart
         if (salesArray.length > 0 && document.getElementById('salesChart')) {
             const ctx = document.getElementById('salesChart');
             if (!ctx) return;
@@ -297,13 +256,11 @@ export default function Dashboard({ inventory, salesData }) {
 
             const sortedDates = Object.keys(salesByDate).sort((a, b) => new Date(a) - new Date(b));
 
-            // Check if there's a chart already and destroy it
             let salesChart = Chart.getChart(ctx);
             if (salesChart) {
                 salesChart.destroy();
             }
 
-            // Create new chart
             salesChart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -329,18 +286,16 @@ export default function Dashboard({ inventory, salesData }) {
             });
         }
 
-        // Create category chart if it exists and has data
+        // Create category chart
         if (categoryDistribution.length > 0 && document.getElementById('categoryChart')) {
             const ctx = document.getElementById('categoryChart');
             if (!ctx) return;
 
-            // Check if there's a chart already and destroy it
             let categoryChart = Chart.getChart(ctx);
             if (categoryChart) {
                 categoryChart.destroy();
             }
 
-            // Create new chart
             categoryChart = new Chart(ctx, {
                 type: 'pie',
                 data: {
@@ -398,119 +353,64 @@ export default function Dashboard({ inventory, salesData }) {
         return labels[dateRange] || 'Selected Period';
     };
 
-    return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h1 className="text-2xl font-bold text-primary-500 mb-4 sm:mb-0">Dashboard</h1>
-
-                <div className="w-full flex flex-col sm:flex-row justify-end gap-4 mb-4">
-                    {/* Tab navigation */}
-                    <div className="w-full sm:w-auto">
-                        <div className="flex bg-gray-100 p-1 rounded-md shadow-sm">
-                            <button
-                                onClick={() => setActiveTab('overview')}
-                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'overview'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
-                                    }`}
-                            >
-                                Overview
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('sales')}
-                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'sales'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
-                                    }`}
-                            >
-                                Sales
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('inventory')}
-                                className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-colors ${activeTab === 'inventory'
-                                    ? 'bg-white shadow text-primary-600 font-medium'
-                                    : 'text-gray-600 hover:text-primary-500'
-                                    }`}
-                            >
-                                Inventory
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Date Range Selector with Calendar Icon */}
-                    <div className="w-full sm:w-auto">
-                        <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                            <select
-                                className="pl-10 pr-8 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-accent-500 focus:border-transparent"
-                                value={dateRange}
-                                onChange={(e) => setDateRange(e.target.value)}
-                            >
-                                <option value="all">All Time</option>
-                                <option value="today">Today</option>
-                                <option value="yesterday">Yesterday</option>
-                                <option value="week">Last 7 Days</option>
-                                <option value="month">Last 30 Days</option>
-                                <option value="3months">Last 3 Months</option>
-                                <option value="custom">Custom Range</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Custom Date Range Inputs */}
-                {dateRange === 'custom' && (
-                    <div className="w-full flex flex-col sm:flex-row gap-3 mt-4 p-4 bg-gray-50 rounded-lg border">
-                        <div className="flex-1">
-                            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">
-                                Start Date
-                            </label>
-                            <input
-                                type="date"
-                                id="startDate"
-                                value={customStartDate}
-                                onChange={(e) => setCustomStartDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-accent-500 focus:border-transparent"
-                                max={customEndDate || new Date().toISOString().split('T')[0]}
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">
-                                End Date
-                            </label>
-                            <input
-                                type="date"
-                                id="endDate"
-                                value={customEndDate}
-                                onChange={(e) => setCustomEndDate(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-accent-500 focus:border-transparent"
-                                min={customStartDate}
-                                max={new Date().toISOString().split('T')[0]}
-                            />
-                        </div>
-                        <div className="flex items-end">
-                            <button
-                                onClick={() => {
-                                    setCustomStartDate('');
-                                    setCustomEndDate('');
-                                }}
-                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-                            >
-                                Clear
-                            </button>
-                        </div>
-                    </div>
-                )}
+    const TopSellingItemsTable = () => (
+        <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+            <div className="px-4 py-3 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-primary-600">Top Selling Items</h3>
             </div>
-
-            {/* Date Range Display */}
-            {dateRange !== 'all' && (
-                <div className="mb-4 text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-md border border-blue-200">
-                    <span className="font-medium">Showing data for:</span> {getDateRangeLabel()}
+            {topSellingItems.length > 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-primary-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Item</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Quantity Sold</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Total Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {topSellingItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity || 0}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.total)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : (
+                <div className="text-gray-500 text-center py-12">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17l6-6-6-6" />
+                    </svg>
+                    <p className="mt-2">
+                        {dateRange !== 'all'
+                            ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
+                            : 'No sales data available'
+                        }
+                    </p>
                 </div>
             )}
+        </div>
+    );
 
-            {/* KPI Cards - Always visible on all tabs */}
+    return (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* Header Component */}
+            <DashboardHeader
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+                customStartDate={customStartDate}
+                setCustomStartDate={setCustomStartDate}
+                customEndDate={customEndDate}
+                setCustomEndDate={setCustomEndDate}
+                getDateRangeLabel={getDateRangeLabel}
+            />
+
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                 <div className="bg-white rounded-lg shadow-md p-4 flex items-center">
                     <div className="rounded-full bg-blue-100 p-3 mr-4">
@@ -577,160 +477,67 @@ export default function Dashboard({ inventory, salesData }) {
 
             {/* Overview Tab Content */}
             {activeTab === 'overview' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                    {/* Sales Chart */}
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-lg font-medium text-primary-600">Sales Trend</h3>
-                        </div>
-                        <div className="p-4">
-                            <div className="h-64">
-                                {filteredSalesData.length > 0 ? (
-                                    <canvas id="salesChart"></canvas>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full">
-                                        <p className="text-gray-500">
-                                            {dateRange !== 'all'
-                                                ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
-                                                : 'No sales data available'}
-                                        </p>
-                                    </div>
-                                )}
+                <>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                        {/* Sales Chart */}
+                        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-200">
+                                <h3 className="text-lg font-medium text-primary-600">Sales Trend</h3>
+                            </div>
+                            <div className="p-4">
+                                <div className="h-64">
+                                    {filteredSalesData.length > 0 ? (
+                                        <canvas id="salesChart"></canvas>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full">
+                                            <p className="text-gray-500">
+                                                {dateRange !== 'all'
+                                                    ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
+                                                    : 'No sales data available'}
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Category Distribution */}
-                    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-200">
-                            <h3 className="text-lg font-medium text-primary-600">Category Distribution</h3>
-                        </div>
-                        <div className="p-4">
-                            <div className="h-64">
-                                {categoryDistribution.length > 0 ? (
-                                    <canvas id="categoryChart"></canvas>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full">
-                                        <p className="text-gray-500">No category data available</p>
-                                    </div>
-                                )}
+                        {/* Category Distribution */}
+                        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-200">
+                                <h3 className="text-lg font-medium text-primary-600">Category Distribution</h3>
+                            </div>
+                            <div className="p-4">
+                                <div className="h-64">
+                                    {categoryDistribution.length > 0 ? (
+                                        <canvas id="categoryChart"></canvas>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full">
+                                            <p className="text-gray-500">No category data available</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                    <TopSellingItemsTable />
+                </>
             )}
 
             {/* Sales Tab Content */}
-            {(activeTab === 'sales' || activeTab === 'overview') && (
-                <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                    <div className="px-4 py-3 border-b border-gray-200">
-                        <h3 className="text-lg font-medium text-primary-600">Top Selling Items</h3>
-                    </div>
-                    {topSellingItems.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-primary-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Item</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Quantity Sold</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Total Sales</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {topSellingItems.map((item) => (
-                                        <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.name || "Unknown"}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{item.quantity || 0}</td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.total)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="text-gray-500 text-center py-12">
-                            <svg className="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17l6-6-6-6" /></svg>
-                            <p className="mt-2">
-                                {dateRange !== 'all'
-                                    ? `No sales data available for the ${getDateRangeLabel().toLowerCase()}`
-                                    : 'No sales data available'
-                                }
-                            </p>
-                        </div>
-                    )}
+            {activeTab === 'sales' && (
+                <div className="space-y-6">
+                    <TopSellingItemsTable />
+                    <SalesDetailView salesData={filteredSalesData} />
                 </div>
             )}
 
             {/* Inventory Tab Content */}
-            {activeTab === 'inventory' && (
-                <div className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div className="px-4 py-3 border-b border-gray-200">
-                        <h3 className="text-lg font-medium text-primary-600">Inventory Overview</h3>
-                    </div>
-                    {Array.isArray(inventory) && inventory.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-primary-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Item</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Category</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Quantity</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Price</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Total Value</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-primary-500 uppercase tracking-wider">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {inventory.map((item, index) => {
-                                        const quantity = Number(item?.quantity) || 0;
-                                        const price = Number(item?.price) || 0;
-                                        const lowStockThreshold = Number(item?.lowStockThreshold) || 0;
-                                        const isLowStock = quantity <= lowStockThreshold;
 
-                                        return (
-                                            <tr key={item?.id || index} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                    {item?.name || 'Unknown Item'}
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                    {item?.category || 'Uncategorized'}
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                    {quantity}
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                    {formatCurrency(price)}
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                                    {formatCurrency(price * quantity)}
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    {isLowStock ? (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                            Low Stock
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                            In Stock
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="text-gray-500 text-center py-12">
-                            <svg className="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            <p className="mt-2">No inventory items available</p>
-                        </div>
-                    )}
-                </div>
+            {activeTab === 'inventory' && (
+                <InventoryOverview
+                    inventory={inventory}
+                    formatCurrency={formatCurrency}
+                />
             )}
         </div>
     );

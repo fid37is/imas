@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 "use client";
 import { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
@@ -5,8 +6,8 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { auth } from "./firebase/config";
 import { toast } from "sonner";
 // Import the correct functions from inventoryService
-import { 
-  getInventory, 
+import {
+  getInventory,
   getSales,
   recordSale
 } from "../app/utils/inventoryService";
@@ -51,35 +52,35 @@ interface SaleRecord {
   userId: string;
 }
 
-// Define SaleData interface to fix the TypeScript error
-interface SaleData {
+// Updated interfaces for your Home component
+interface ExtendedSaleRecord extends SaleRecord {
+  actualPrice?: number; // Actual selling price used
+  standardPrice?: number; // Standard/default price
+  costPrice?: number;
+  profit?: number;
+  isDiscounted?: boolean;
+  isPremium?: boolean;
+}
+
+interface RawInventoryItem {
   id: string;
   name: string;
-  price: number;
+  category?: string;
   quantity: number;
-  costPrice: number;
-  sku: string;
+  price: number;
+  sku?: string;
+  costPrice?: number;
+  lowStockThreshold: number;
+  imageUrl?: string;
 }
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [salesData, setSalesData] = useState<SaleRecord[]>([]);
+  const [salesData, setSalesData] = useState<ExtendedSaleRecord[]>([]);
   const [lowStockItems, setLowStockItems] = useState<InventoryItem[]>([]);
   const [showLowStockAlert, setShowLowStockAlert] = useState<boolean>(false);
-
-  interface RawInventoryItem {
-    id: string;
-    name: string;
-    category?: string;
-    quantity: number;
-    price: number;
-    sku?: string;
-    costPrice?: number;
-    lowStockThreshold: number;
-    imageUrl?: string;
-  }
 
   // Auth state listener
   useEffect(() => {
@@ -99,7 +100,7 @@ export default function Home() {
         try {
           // Load inventory data
           const rawInventoryData = await getInventory();
-          
+
           // Transform the data to match our InventoryItem interface
           const formattedInventory: InventoryItem[] = rawInventoryData.map((item: RawInventoryItem) => ({
             id: item.id,
@@ -113,15 +114,15 @@ export default function Home() {
             imageUrl: item.imageUrl,
             lastUpdated: new Date().toISOString()
           }));
-          
+
           setInventory(formattedInventory);
 
           // Find low stock items
-          const lowStock = formattedInventory.filter(item => 
+          const lowStock = formattedInventory.filter(item =>
             item.quantity <= item.lowStockThreshold
           );
           setLowStockItems(lowStock);
-          
+
           // Show low stock alert if there are items low in stock
           if (lowStock && lowStock.length > 0) {
             setShowLowStockAlert(true);
@@ -133,7 +134,7 @@ export default function Home() {
           // Load sales data
           try {
             const sales = await getSales();
-            setSalesData(sales as SaleRecord[]);
+            setSalesData(sales as ExtendedSaleRecord[]);
           } catch (error) {
             console.error("Error loading sales data:", error);
             setSalesData([]);
@@ -153,56 +154,59 @@ export default function Home() {
     loadData();
   }, [user]);
 
-  // Handle selling an item
-  const handleSellItem = async (item: InventoryItem, quantity: number) => {
+  // Handle selling an item with proper TypeScript types
+  const handleSellItem = async (
+    item: InventoryItem,
+    quantity: number,
+    actualSellingPrice: number
+  ): Promise<boolean> => {
     try {
       setLoading(true);
-      
+
       if (!user) {
         throw new Error("User not authenticated");
       }
-      
-      // Create sale object with proper typing
-      const saleData: SaleData = {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        quantity: quantity,
-        costPrice: item.costPrice || 0,
-        sku: item.sku || ''
-      };
-      
-      // Record the sale - this automatically updates inventory quantities
-      await recordSale(saleData, quantity);
-      
-      // Update local state
-      const newSaleRecord: SaleRecord = {
-        id: Date.now().toString(),
+
+      // Call recordSale with the correct parameters: item, quantity, customPrice
+      //@ts-ignore
+      const saleResult = await recordSale(item, quantity, actualSellingPrice);
+
+      // Create new sale record using the result from recordSale
+      const newSaleRecord: ExtendedSaleRecord = {
+        id: saleResult.id || Date.now().toString(),
         itemId: item.id,
         itemName: item.name,
         quantity: quantity,
-        unitPrice: item.price,
-        totalPrice: item.price * quantity,
+        unitPrice: actualSellingPrice, // Use actual selling price
+        totalPrice: actualSellingPrice * quantity, // Calculate total
+        actualPrice: actualSellingPrice, // Store the actual selling price
+        standardPrice: item.price, // Store the standard price for reference
+        costPrice: item.costPrice || 0, // Store cost price
+        profit: (actualSellingPrice - (item.costPrice || 0)) * quantity, // Calculate profit
         timestamp: new Date().toISOString(),
-        userId: user.uid
+        userId: user.uid,
+        isDiscounted: actualSellingPrice < item.price, // Check if discounted
+        isPremium: actualSellingPrice > item.price // Check if premium pricing
       };
+
       setSalesData(prevSales => [...prevSales, newSaleRecord]);
-      
+
       // Update inventory item in local state
-      const updatedInventory = inventory.map(invItem => 
-        invItem.id === item.id 
-          ? { 
-              ...invItem, 
-              quantity: Math.max(0, invItem.quantity - quantity),
-              lastUpdated: new Date().toISOString()
-            } 
+      const updatedInventory = inventory.map(invItem =>
+        invItem.id === item.id
+          ? {
+            ...invItem,
+            quantity: Math.max(0, invItem.quantity - quantity),
+            lastUpdated: new Date().toISOString()
+          }
           : invItem
       );
       setInventory(updatedInventory);
-      
+
       // Check if this sale caused the item to reach low stock levels
       const updatedItemInState = updatedInventory.find(i => i.id === item.id);
-      if (updatedItemInState && updatedItemInState.quantity <= updatedItemInState.lowStockThreshold) {
+      if (updatedItemInState && updatedItemInState.lowStockThreshold &&
+        updatedItemInState.quantity <= updatedItemInState.lowStockThreshold) {
         if (!lowStockItems.some(i => i.id === item.id)) {
           setLowStockItems(prevLowStock => [...prevLowStock, updatedItemInState]);
           setShowLowStockAlert(true);
@@ -211,11 +215,19 @@ export default function Home() {
           });
         }
       }
-      
-      toast.success(`Sale recorded: ${quantity}x ${item.name}`, {
-        description: `Total: $${(item.price * quantity).toFixed(2)}`
+
+      // Show success message with actual selling price
+      const actualPriceText = actualSellingPrice !== item.price
+        ? ` at ₦${actualSellingPrice.toFixed(2)} each`
+        : '';
+
+      const totalPrice = actualSellingPrice * quantity;
+      const profit = (actualSellingPrice - (item.costPrice || 0)) * quantity;
+
+      toast.success(`Sale recorded: ${quantity}x ${item.name}${actualPriceText}`, {
+        description: `Total: ₦${totalPrice.toFixed(2)} | Profit: ₦${profit.toFixed(2)}`
       });
-      
+
       return true;
     } catch (error) {
       console.error("Error selling item:", error);
@@ -237,16 +249,16 @@ export default function Home() {
   }
 
   return (
-      <Router>
+    <Router>
       <div className="min-h-screen bg-gray-50">
         <Navbar user={user} />
-        
+
         {showLowStockAlert && lowStockItems.length > 0 && (
           <div className="fixed top-16 right-0 m-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded shadow-md z-40 max-w-md">
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-bold">Low Stock Alert</h3>
-              <button 
-                onClick={() => setShowLowStockAlert(false)} 
+              <button
+                onClick={() => setShowLowStockAlert(false)}
                 className="text-yellow-700 hover:text-yellow-900"
               >
                 ×
@@ -262,34 +274,34 @@ export default function Home() {
             </ul>
           </div>
         )}
-        
+
         <div className="container mx-auto py-6 px-4">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route 
-              path="/dashboard" 
+            <Route
+              path="/dashboard"
               element={
-                <Dashboard 
-                  salesData={salesData} 
+                <Dashboard
+                  salesData={salesData}
                   inventory={inventory}
                 />
-              } 
+              }
             />
-            <Route 
-              path="/inventory" 
+            <Route
+              path="/inventory"
               element={
-                <InventoryPage 
+                <InventoryPage
                   inventory={inventory}
                   setInventory={setInventory}
                   onSellItem={handleSellItem}
                 />
-              } 
+              }
             />
-            <Route 
-              path="/orders" 
+            <Route
+              path="/orders"
               element={
                 <OrderManagement />
-              } 
+              }
             />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

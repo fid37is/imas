@@ -236,22 +236,21 @@ export const deleteInventoryItem = async (itemId) => {
 };
 
 // Record a sale
-export const recordSale = async (item, quantity) => {
+// Record a sale with optional custom price
+export const recordSale = async (item, quantity, customPrice = null) => {
     try {
         // Find the item in inventory
         const inventoryItems = await getInventory();
         const inventoryItem = inventoryItems.find(i => i.id === item.id);
-
         if (!inventoryItem) {
             throw new Error('Item not found in inventory');
         }
-
         if (inventoryItem.quantity < quantity) {
             throw new Error('Not enough items in stock');
         }
 
-        // Calculate sale details
-        const unitPrice = inventoryItem.price;
+        // Calculate sale details - use custom price if provided, otherwise use inventory price
+        const unitPrice = customPrice !== null ? customPrice : inventoryItem.price;
         const totalPrice = unitPrice * quantity;
         const costPrice = inventoryItem.costPrice || 0;
         const profit = (unitPrice - costPrice) * quantity;
@@ -262,7 +261,7 @@ export const recordSale = async (item, quantity) => {
             inventoryItem.name || '',
             inventoryItem.sku || '',
             quantity.toString(),
-            unitPrice.toString(),
+            unitPrice.toString(), // This will now use custom price if provided
             totalPrice.toString(),
             costPrice.toString(),
             profit.toString(),
@@ -285,9 +284,10 @@ export const recordSale = async (item, quantity) => {
             itemName: inventoryItem.name,
             sku: inventoryItem.sku || '',
             quantity,
-            unitPrice,
+            unitPrice, // This reflects the actual selling price used
             totalPrice,
-            profit
+            profit,
+            actualPrice: unitPrice // Add this to make it clear what price was actually used
         };
     } catch (error) {
         console.error('Error recording sale:', error);
@@ -337,11 +337,11 @@ export const getInventoryItemById = async (itemId) => {
     try {
         const inventory = await getInventory();
         const item = inventory.find(i => i.id === itemId);
-        
+
         if (!item) {
             throw new Error(`Item with ID ${itemId} not found`);
         }
-        
+
         return item;
     } catch (error) {
         console.error('Error getting inventory item by ID:', error);
@@ -359,7 +359,7 @@ export const updateInventoryAfterOrder = async (orderItems) => {
             try {
                 // Get current inventory item
                 const inventoryItem = await getInventoryItemById(orderItem.productId);
-                
+
                 if (!inventoryItem) {
                     console.error(`Item ${orderItem.productId} not found in inventory`);
                     allSuccess = false;
@@ -390,7 +390,7 @@ export const updateInventoryAfterOrder = async (orderItems) => {
                 };
 
                 await updateInventoryItem(inventoryItem.id, updatedItem);
-                
+
                 results.push({
                     productId: orderItem.productId,
                     success: true,
@@ -400,7 +400,7 @@ export const updateInventoryAfterOrder = async (orderItems) => {
                 });
 
                 // Check if item is now below low stock threshold
-                if (updatedItem.lowStockThreshold && 
+                if (updatedItem.lowStockThreshold &&
                     updatedItem.quantity <= updatedItem.lowStockThreshold) {
                     console.warn(`Item ${updatedItem.name} is now below low stock threshold`);
                     // You can trigger low stock alert here if needed
@@ -444,7 +444,7 @@ export const restoreInventoryAfterCancellation = async (orderItems) => {
             try {
                 // Get current inventory item
                 const inventoryItem = await getInventoryItemById(orderItem.productId);
-                
+
                 if (!inventoryItem) {
                     console.error(`Item ${orderItem.productId} not found in inventory`);
                     allSuccess = false;
@@ -463,7 +463,7 @@ export const restoreInventoryAfterCancellation = async (orderItems) => {
                 };
 
                 await updateInventoryItem(inventoryItem.id, updatedItem);
-                
+
                 results.push({
                     productId: orderItem.productId,
                     success: true,
@@ -504,13 +504,13 @@ export const restoreInventoryAfterCancellation = async (orderItems) => {
 export const getLowStockItems = async () => {
     try {
         const inventory = await getInventory();
-        
+
         const lowStockItems = inventory.filter(item => {
             // Only consider items that have a low stock threshold set
             if (!item.lowStockThreshold || item.lowStockThreshold === null) {
                 return false;
             }
-            
+
             return item.quantity <= item.lowStockThreshold;
         });
 
@@ -530,10 +530,10 @@ export const bulkUpdateInventory = async (updates) => {
         for (const update of updates) {
             try {
                 const { itemId, quantity, operation = 'set' } = update;
-                
+
                 // Get current inventory item
                 const inventoryItem = await getInventoryItemById(itemId);
-                
+
                 if (!inventoryItem) {
                     allSuccess = false;
                     results.push({
@@ -565,7 +565,7 @@ export const bulkUpdateInventory = async (updates) => {
                 };
 
                 await updateInventoryItem(itemId, updatedItem);
-                
+
                 results.push({
                     itemId,
                     success: true,
@@ -612,14 +612,14 @@ export const getInventoryStats = async () => {
         const totalQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
         const totalValue = inventory.reduce((sum, item) => sum + (item.quantity * item.price), 0);
         const totalCostValue = inventory.reduce((sum, item) => sum + (item.quantity * (item.costPrice || 0)), 0);
-        
+
         const lowStockItems = await getLowStockItems();
         const outOfStockItems = inventory.filter(item => item.quantity === 0);
 
         // Recent sales (last 30 days)
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
+
         const recentSales = sales.filter(sale => {
             const saleDate = new Date(sale.timestamp);
             return saleDate >= thirtyDaysAgo;
@@ -794,11 +794,11 @@ export const getOrderById = async (orderId) => {
     try {
         const orders = await getOrdersWithItems();
         const order = orders.find(o => o.orderId === orderId);
-        
+
         if (!order) {
             throw new Error(`Order with ID ${orderId} not found`);
         }
-        
+
         return order;
     } catch (error) {
         console.error('Error getting order by ID:', error);
@@ -834,7 +834,7 @@ export const getOrdersByDateRange = async (startDate, endDate) => {
         const orders = await getOrdersWithItems();
         const start = new Date(startDate);
         const end = new Date(endDate);
-        
+
         return orders.filter(order => {
             const orderDate = new Date(order.orderDate);
             return orderDate >= start && orderDate <= end;
@@ -851,7 +851,7 @@ export const getRecentOrders = async (days = 30) => {
         const endDate = new Date();
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - days);
-        
+
         return await getOrdersByDateRange(startDate.toISOString(), endDate.toISOString());
     } catch (error) {
         console.error('Error getting recent orders:', error);
@@ -863,33 +863,33 @@ export const getRecentOrders = async (days = 30) => {
 export const getOrderStats = async () => {
     try {
         const orders = await getOrdersWithItems();
-        
+
         const totalOrders = orders.length;
         const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
         const totalShippingFees = orders.reduce((sum, order) => sum + order.shippingFee, 0);
-        
+
         // Orders by status
         const ordersByStatus = orders.reduce((acc, order) => {
             const status = order.status.toLowerCase();
             acc[status] = (acc[status] || 0) + 1;
             return acc;
         }, {});
-        
+
         // Recent orders (last 30 days)
         const recentOrders = await getRecentOrders(30);
         const recentRevenue = recentOrders.reduce((sum, order) => sum + order.totalAmount, 0);
-        
+
         // Average order value
         const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
         const recentAverageOrderValue = recentOrders.length > 0 ? recentRevenue / recentOrders.length : 0;
-        
+
         // Payment methods breakdown
         const paymentMethods = orders.reduce((acc, order) => {
             const method = order.paymentMethod || 'Unknown';
             acc[method] = (acc[method] || 0) + 1;
             return acc;
         }, {});
-        
+
         // Top selling products from order items
         const allOrderItems = orders.flatMap(order => order.items);
         const productSales = allOrderItems.reduce((acc, item) => {
@@ -907,11 +907,11 @@ export const getOrderStats = async () => {
             acc[item.productId].orderCount += 1;
             return acc;
         }, {});
-        
+
         const topSellingProducts = Object.values(productSales)
             .sort((a, b) => b.totalQuantity - a.totalQuantity)
             .slice(0, 10);
-        
+
         return {
             overview: {
                 totalOrders,
@@ -1020,12 +1020,12 @@ export const getOrderStatus = async (orderId) => {
  */
 export const batchUpdateOrderStatuses = async (orderUpdates) => {
     try {
-        const updatePromises = orderUpdates.map(update => 
+        const updatePromises = orderUpdates.map(update =>
             updateOrderStatusInSheet(update.orderId, update.status, update.trackingNumber)
         );
 
         const results = await Promise.allSettled(updatePromises);
-        
+
         const successfulUpdates = [];
         const failedUpdates = [];
 
@@ -1070,7 +1070,7 @@ export const notifyCustomerStatusUpdate = async (orderId, newStatus, customerInf
     try {
         // This is a placeholder for your notification logic
         // You can integrate with your email service, SMS service, etc.
-        
+
         const notificationData = {
             orderId,
             newStatus,
@@ -1082,9 +1082,9 @@ export const notifyCustomerStatusUpdate = async (orderId, newStatus, customerInf
 
         // Example: Send email notification (implement based on your email service)
         // const emailResult = await sendStatusUpdateEmail(notificationData);
-        
+
         console.log('Customer notification data prepared:', notificationData);
-        
+
         return {
             success: true,
             message: 'Customer notification prepared',
@@ -1126,7 +1126,7 @@ export const validateStatusTransition = (currentStatus, newStatus) => {
     }
 
     const allowedTransitions = validTransitions[current] || [];
-    
+
     if (current === proposed) {
         return {
             valid: true,
@@ -1156,9 +1156,9 @@ export const getOrderStatusHistory = async (orderId) => {
     try {
         // This would require a separate sheet or additional columns to track status history
         // For now, this is a placeholder that returns current status
-        
+
         const currentStatus = await getOrderStatus(orderId);
-        
+
         return [{
             orderId,
             status: currentStatus.status,
